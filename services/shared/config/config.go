@@ -16,6 +16,12 @@ const defaultSchedulerArtifactStoreCapacity = 1_000_000
 type Node struct {
 	ID       string `json:"id"`
 	Endpoint string `json:"endpoint"`
+	// NoSchedule cordons the node: it stays routable for existing sandboxes,
+	// keeps appearing in node listings and cluster sandbox lists, and its
+	// heartbeats are accepted, but the scheduler places no new sandboxes on
+	// it. Mirrors the kubernetes-mode no_schedule_pod_selector semantics for
+	// static discovery.
+	NoSchedule bool `json:"no_schedule"`
 }
 
 type SchedulerDiscoveryKubernetesConfig struct {

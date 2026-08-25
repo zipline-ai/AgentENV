@@ -59,11 +59,17 @@ func main() {
 		case "kubernetes":
 			go runKubernetesDiscoveryWithRetry(sigCtx, logger, cfg.Scheduler.Discovery.Kubernetes, registry)
 		default:
-			nodes := make([]scheduler.Node, 0, len(cfg.Scheduler.Nodes))
+			active := make([]scheduler.Node, 0, len(cfg.Scheduler.Nodes))
+			var lingering []scheduler.Node
 			for _, n := range cfg.Scheduler.Nodes {
-				nodes = append(nodes, scheduler.Node{ID: n.ID, Endpoint: n.Endpoint})
+				node := scheduler.Node{ID: n.ID, Endpoint: n.Endpoint}
+				if n.NoSchedule {
+					lingering = append(lingering, node)
+					continue
+				}
+				active = append(active, node)
 			}
-			registry.Set(nodes, nil)
+			registry.Set(active, lingering)
 		}
 
 		svc := scheduler.NewService(

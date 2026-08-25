@@ -487,3 +487,25 @@ func TestMultiClusterCpuIntersectionsAreIndependent(t *testing.T) {
 		t.Errorf("cluster-y y1: got unexpected second delivery %v", c)
 	}
 }
+
+func TestLingeringNodesStayRoutableButUnschedulable(t *testing.T) {
+	registry := NewAtomicNodeRegistry(nil, 30*time.Second)
+	healthy := Node{ID: "node-a", Endpoint: "http://node-a"}
+	cordoned := Node{ID: "node-b", Endpoint: "http://node-b"}
+	registry.Set([]Node{healthy}, []Node{cordoned})
+
+	schedulable := registry.Snapshot(false)
+	if len(schedulable) != 1 || schedulable[0].ID != "node-a" {
+		t.Fatalf("scheduling snapshot must exclude the cordoned node: %#v", schedulable)
+	}
+	listed := registry.Snapshot(true)
+	if len(listed) != 2 {
+		t.Fatalf("listing snapshot must include the cordoned node: %#v", listed)
+	}
+	if !registry.Contains(cordoned) {
+		t.Fatal("heartbeats and assignments from a cordoned node must stay accepted")
+	}
+	if node, ok := registry.Resolve("node-b"); !ok || node.Endpoint != "http://node-b" {
+		t.Fatalf("a cordoned node must stay resolvable for routing: %#v ok=%v", node, ok)
+	}
+}

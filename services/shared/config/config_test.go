@@ -603,3 +603,33 @@ func TestLoadRejectsIncompleteKubernetesSchedulerDiscoveryConfig(t *testing.T) {
 		t.Fatal("expected load to fail for incomplete kubernetes discovery config")
 	}
 }
+
+func TestLoadParsesNoScheduleNodes(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "config.json")
+	content := `{
+		"scheduler": {
+			"nodes": [
+				{"id": "node-a", "endpoint": "http://10.0.0.1:8000"},
+				{"id": "node-b", "endpoint": "http://10.0.0.2:8000", "no_schedule": true}
+			]
+		}
+	}`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config file failed: %v", err)
+	}
+
+	cfg, err := Load(path, "scheduler")
+	if err != nil {
+		t.Fatalf("load config failed: %v", err)
+	}
+	if len(cfg.Scheduler.Nodes) != 2 {
+		t.Fatalf("expected 2 nodes, got %d", len(cfg.Scheduler.Nodes))
+	}
+	if cfg.Scheduler.Nodes[0].NoSchedule {
+		t.Fatalf("node-a must default to schedulable")
+	}
+	if !cfg.Scheduler.Nodes[1].NoSchedule {
+		t.Fatalf("node-b must parse no_schedule")
+	}
+}
