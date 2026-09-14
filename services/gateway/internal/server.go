@@ -66,6 +66,7 @@ type Server struct {
 	// header. Off by default; toggled via GatewayConfig.DebugMode.
 	debugMode           bool
 	sandboxProxyDomains []string
+	launchObservations  launchObservationRoutes
 }
 
 func NewServer(logger *zap.Logger, schedulerClient schedulerv1.SchedulerClient, options ServerOptions) (*Server, error) {
@@ -104,6 +105,10 @@ func (s *Server) Handler() http.Handler {
 	// decoding %2F → / and issuing 301 redirects), which breaks proxy
 	// forwarding of percent-encoded path segments such as /files/%2F.
 	core := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isLaunchObservationPath(r.URL.Path) {
+			s.handleLaunchObservation(w, r)
+			return
+		}
 		if isExplicitProxyPath(r.URL.Path) && !hasCompleteProxyRouteHeaders(r.Header) {
 			setGatewayRouteSource(w, routeSourceHeader)
 			if _, hasSandbox := sandboxIDFromHeaders(r.Header); !hasSandbox {
@@ -166,6 +171,18 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
+	attempt := r.Header.Get(headerLaunchAttempt)
+	reservedAt := time.Now()
+	if attempt != "" {
+		if !isObservedLaunchRequest(r) || hasProxyRoutingHeaders(r.Header) || len(r.Header.Values(headerLaunchAttempt)) != 1 || !validLaunchAttempt(attempt) || s.launchObservations.reserve(attempt, reservedAt) != 0 {
+			// Telemetry is optional. Invalid, duplicate or exhausted observations must
+			// not change lifecycle dispatch, and cannot label a different operation.
+			r = r.Clone(r.Context())
+			r.Header.Del(headerLaunchAttempt)
+			attempt = ""
+		}
+	}
+
 	websocket := isWebSocketRequest(r)
 	streaming := isStreamingRequest(r)
 	longLived := streaming || websocket
@@ -252,6 +269,9 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		node = resp.GetNode()
 	}
 
+	if attempt != "" {
+		s.launchObservations.bind(attempt, node, reservedAt)
+	}
 	s.logger.Debug("gateway routed request",
 		zap.String("method", r.Method),
 		zap.String("path", r.URL.Path),
@@ -870,7 +890,7 @@ func isExplicitProxyPath(path string) bool {
 
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		dataPlane := s.isSandboxDataPlaneRequest(r)
+		dataPlane := !isLaunchObservationPath(r.URL.Path) && s.isSandboxDataPlaneRequest(r)
 		if dataPlane || r.URL.Path == "/health" || r.URL.Path == "/metrics" {
 			// Sandbox-scoped ingress and envd authorization depend on runtime
 			// metadata and are enforced by the owning runtime node.
