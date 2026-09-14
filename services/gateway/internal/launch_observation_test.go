@@ -258,3 +258,43 @@ func TestLaunchObservationExpiredDispatchCannotRebindReplacement(t *testing.T) {
 		t.Fatal("replacement lost exact binding")
 	}
 }
+
+func TestLaunchObservationDiscardsResponseAfterRouteInvalidation(t *testing.T) {
+	const id = "550e8400-e29b-41d4-a716-446655440000"
+	for _, change := range []string{"duplicate", "expired", "replacement"} {
+		t.Run(change, func(t *testing.T) {
+			entered, release := make(chan struct{}), make(chan struct{})
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				close(entered)
+				<-release
+				fmt.Fprintf(w, `{"attempt_id":%q,"phase":"loading_snapshot","elapsed_ms":12,"done":false}`, id)
+			}))
+			defer upstream.Close()
+			s := newTestServer(t, stubSchedulerClient{}, time.Second, 1024)
+			now := time.Now()
+			s.launchObservations.reserve(id, now)
+			s.launchObservations.bind(id, &schedulerv1.Node{NodeId: "old", Endpoint: upstream.URL}, now)
+			r := httptest.NewRequest("GET", "/launch-observations/"+id, nil)
+			r.Header.Set(headerAPIKey, testAPIKey)
+			w := httptest.NewRecorder()
+			done := make(chan struct{})
+			go func() { defer close(done); s.Handler().ServeHTTP(w, r) }()
+			<-entered
+			switch change {
+			case "duplicate":
+				s.launchObservations.reserve(id, time.Now())
+			case "expired":
+				s.launchObservations.lookup(id, now.Add(launchObservationTTL))
+			case "replacement":
+				next := now.Add(launchObservationTTL)
+				s.launchObservations.reserve(id, next)
+				s.launchObservations.bind(id, &schedulerv1.Node{NodeId: "replacement", Endpoint: upstream.URL}, next)
+			}
+			close(release)
+			<-done
+			if w.Code != http.StatusNotFound || strings.Contains(w.Body.String(), "loading_snapshot") {
+				t.Fatalf("stale response after %s: %d %s", change, w.Code, w.Body.String())
+			}
+		})
+	}
+}

@@ -159,5 +159,12 @@ func (s *Server) handleLaunchObservation(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "observation unavailable", http.StatusBadGateway)
 		return
 	}
+	// The node read can outlive this dispatch mapping. Reprove the same
+	// reservation before returning evidence, including duplicate suppression.
+	current, ok := s.launchObservations.lookup(id, time.Now())
+	if !ok || current.nodeID != entry.nodeID || current.endpoint != entry.endpoint || !current.expires.Equal(entry.expires) {
+		http.NotFound(w, r)
+		return
+	}
 	s.writeJSON(w, http.StatusOK, sample)
 }
