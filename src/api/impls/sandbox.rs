@@ -619,6 +619,7 @@ impl Sandboxes<()> for ApiImpl {
         body: &models::NewSandbox,
     ) -> Result<SandboxesPostResponse, ()> {
         let timer = SandboxStageTimer::new("create_warm");
+        crate::observability::launch::phase(crate::observability::launch::Phase::FetchingSnapshot);
         let snapshot = match timer
             .time(
                 "load_snapshot",
@@ -640,6 +641,8 @@ impl Sandboxes<()> for ApiImpl {
                 ));
             }
         };
+
+        crate::observability::launch::phase(crate::observability::launch::Phase::Unknown);
 
         let network_policy =
             match network_policy_from_create(body.allow_internet_access, body.network.as_ref()) {

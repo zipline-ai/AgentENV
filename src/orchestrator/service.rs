@@ -240,8 +240,9 @@ where
         T: Send + 'static,
     {
         let (tx, rx) = oneshot::channel();
+        let observation = crate::observability::launch::current();
         tokio::spawn(async move {
-            let result = future.await;
+            let result = crate::observability::launch::scope(observation, future).await;
             if tx.send(result).is_err() {
                 debug!(
                     sandbox_id = %sandbox_id,
@@ -1974,6 +1975,7 @@ where
         self.ensure_accepting_lifecycle_operations()?;
 
         let sandbox_id = plan.sandbox_id();
+        crate::observability::launch::bind(sandbox_id.to_string());
         let transitional_state = plan.transitional_state();
 
         // Build and start the sandbox first, before making any state changes, so that we don't
@@ -2034,6 +2036,7 @@ where
             return Err(OrchestratorError::ShuttingDown);
         }
 
+        crate::observability::launch::phase(crate::observability::launch::Phase::BootingGuest);
         let runtime_resources =
             resources_with_runtime_info(plan.resources(), sandbox.runtime_info());
         let transitional_metadata = plan.transitional_metadata().map(|metadata| {

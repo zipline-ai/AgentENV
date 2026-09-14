@@ -4769,3 +4769,45 @@ async fn fork_sandbox_register_failure_cleans_up_metrics() -> Result<()> {
     orchestrator.delete_sandbox(source.id).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn launch_status_observes_exact_runtime_without_inventing_fetch_or_load() -> Result<()> {
+    setup();
+    use crate::observability::launch::{self, Phase};
+    let behavior = Arc::new(MockBehavior::new());
+    let id = uuid::Uuid::new_v4();
+    behavior.set_on_operation(
+        MockOperation::StartNowait,
+        Arc::new(move || {
+            let status = launch::read(id).unwrap();
+            assert!(status.sandbox_id.is_some());
+            assert!(!status.done);
+            assert_eq!(serde_json::to_value(status).unwrap()["phase"], "unknown");
+        }),
+    );
+    behavior.set_on_operation(
+        MockOperation::WaitForReady,
+        Arc::new(move || {
+            let status = launch::read(id).unwrap();
+            assert!(!status.done);
+            assert_eq!(
+                serde_json::to_value(status).unwrap()["phase"],
+                "booting_guest"
+            );
+        }),
+    );
+    let orchestrator =
+        make_orchestrator_with_factory(MockBackendFactory::with_behavior(behavior)).await;
+    let metadata = launch::scope(launch::begin(id), async {
+        launch::phase(Phase::Unknown);
+        orchestrator
+            .create_sandbox(create_request(Some(30), &[]))
+            .await
+    })
+    .await?;
+    let status = launch::read(id).unwrap();
+    assert_eq!(status.sandbox_id, Some(metadata.id.to_string()));
+    assert!(status.done);
+    assert_eq!(metadata.state, SandboxState::Running);
+    Ok(())
+}

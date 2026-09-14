@@ -11,6 +11,7 @@
 //! sandboxes on every call.
 
 mod host;
+pub mod launch;
 mod machine;
 mod model;
 pub mod prometheus;

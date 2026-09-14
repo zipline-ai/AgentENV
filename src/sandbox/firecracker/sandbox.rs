@@ -1592,6 +1592,7 @@ impl FirecrackerSandbox {
 
         // Override the network interface to use the new tap0 in our namespace
         let network_overrides = [("eth0", "tap0")];
+        crate::observability::launch::phase(crate::observability::launch::Phase::LoadingSnapshot);
         self.fc_instance
             .load_snapshot_file(
                 &vm_state_src,
@@ -1601,6 +1602,8 @@ impl FirecrackerSandbox {
                 config.common.track_dirty_pages,
             )
             .await?;
+
+        crate::observability::launch::phase(crate::observability::launch::Phase::Unknown);
 
         let mmds_metadata = self.mmds_metadata(&config.common);
         self.fc_instance.set_mmds(&mmds_metadata).await?;
