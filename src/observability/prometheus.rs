@@ -110,6 +110,7 @@ pub struct MetricGuard {
     start: Instant,
     status: &'static str,
     recorded: bool,
+    node_sample: Option<(crate::observability::launch::Observation, &'static str)>,
 }
 
 #[derive(Clone, Copy)]
@@ -123,6 +124,19 @@ enum MetricGuardLabel {
     OperationStage(&'static str, &'static str),
 }
 
+fn node_sample_stage(operation: &str, stage: &str) -> Option<&'static str> {
+    match (operation, stage) {
+        ("create_warm", "load_snapshot") => Some("fetch_snapshot"),
+        ("guest_boot", "load_snapshot") => Some("load_snapshot"),
+        ("guest_boot", "vm_start_issued") => Some("vm_start_issued"),
+        ("guest_boot", "envd_ready") => Some("envd_ready"),
+        ("guest_boot", "memory_download_release") => Some("memory_download_release"),
+        ("guest_boot", "rootfs_download_release") => Some("rootfs_download_release"),
+        ("guest_boot", "envd_init") => Some("envd_init"),
+        _ => None,
+    }
+}
+
 impl MetricGuard {
     fn operation_stage(operation: &'static str, stage: &'static str) -> Self {
         Self {
@@ -131,6 +145,8 @@ impl MetricGuard {
             start: Instant::now(),
             status: "canceled",
             recorded: false,
+            node_sample: crate::observability::launch::current()
+                .zip(node_sample_stage(operation, stage)),
         }
     }
 
@@ -144,6 +160,7 @@ impl MetricGuard {
             start: Instant::now(),
             status: "canceled",
             recorded: false,
+            node_sample: None,
         }
     }
 
@@ -164,6 +181,7 @@ impl MetricGuard {
             start: Instant::now(),
             status: "canceled",
             recorded: false,
+            node_sample: None,
         }
     }
 
@@ -174,6 +192,7 @@ impl MetricGuard {
             start: Instant::now(),
             status: "canceled",
             recorded: false,
+            node_sample: None,
         }
     }
 
@@ -187,7 +206,23 @@ impl MetricGuard {
             return;
         }
         self.recorded = true;
-        let elapsed = self.start.elapsed().as_secs_f64();
+        let duration = self.start.elapsed();
+        let elapsed = duration.as_secs_f64();
+        if let Some((observation, stage)) = self.node_sample.as_ref() {
+            if let Some(dispatch_attempt) = observation.sample_attempt() {
+                let sample = serde_json::json!({
+                    "version": 1,
+                    "dispatch_attempt": dispatch_attempt,
+                    "stage": stage,
+                    "outcome": match self.status { "ok" => "success", "error" => "failed", _ => "canceled" },
+                    "duration_ms": duration.as_millis().min(u64::MAX as u128) as u64,
+                });
+                if let Ok(node_sample_json) = serde_json::to_string(&sample) {
+                    // Explicit opt-in sample; keep coordinates out of metric labels.
+                    tracing::info!(node_sample_json, "node launch phase sample");
+                }
+            }
+        }
         match self.label {
             MetricGuardLabel::OperationStage(operation, stage) => {
                 // Numeric timing under the caller's protected trace context.
@@ -423,6 +458,101 @@ mod stage_tests {
                 ]
             );
             assert!(duration.is_finite() && *duration >= 0.0);
+        }
+    }
+}
+
+#[cfg(test)]
+mod node_sample_tests {
+    use super::SandboxStageTimer;
+    use crate::observability::launch;
+    use std::sync::{Arc, Mutex};
+    #[derive(Clone, Default)]
+    struct Writer(Arc<Mutex<Vec<u8>>>);
+    impl std::io::Write for Writer {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    #[test]
+    fn node_phase_samples_capture_dispatch_before_runtime_and_record_cancel_once() {
+        let writer = Writer::default();
+        let sink = writer.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .with_max_level(tracing::Level::INFO)
+            .with_writer(move || sink.clone())
+            .finish();
+        let dispatch = uuid::Uuid::new_v4();
+        tracing::subscriber::with_default(subscriber, || {
+            tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    let timer = SandboxStageTimer::new("guest_boot");
+                    timer
+                        .time("envd_ready", async { Ok::<(), ()>(()) })
+                        .await
+                        .unwrap();
+                    let (pending,) = launch::scope(launch::begin(dispatch), async {
+                        SandboxStageTimer::new("create_warm")
+                            .time("load_snapshot", async { Ok::<(), ()>(()) })
+                            .await
+                            .unwrap();
+                        timer
+                            .time("load_snapshot", async { Ok::<(), ()>(()) })
+                            .await
+                            .unwrap();
+                        timer
+                            .time("untrusted-extra-stage", async { Ok::<(), ()>(()) })
+                            .await
+                            .unwrap();
+                        assert!(timer
+                            .time("envd_ready", async { Err::<(), ()>(()) })
+                            .await
+                            .is_err());
+                        let mut pending = Box::pin(
+                            timer.time("vm_start_issued", std::future::pending::<Result<(), ()>>()),
+                        );
+                        assert!(futures::poll!(pending.as_mut()).is_pending());
+                        (pending,)
+                    })
+                    .await;
+                    assert!(launch::current().is_none());
+                    drop(pending);
+                });
+        });
+        let output = String::from_utf8(writer.0.lock().unwrap().clone()).unwrap();
+        let samples: Vec<serde_json::Value> = output
+            .lines()
+            .filter_map(|line| {
+                let row: serde_json::Value = serde_json::from_str(line).unwrap();
+                if row["fields"]["message"] != "node launch phase sample" {
+                    return None;
+                }
+                Some(
+                    serde_json::from_str(row["fields"]["node_sample_json"].as_str().unwrap())
+                        .unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(samples.len(), 4, "{output}");
+        for (row, (stage, outcome)) in samples.iter().zip([
+            ("fetch_snapshot", "success"),
+            ("load_snapshot", "success"),
+            ("envd_ready", "failed"),
+            ("vm_start_issued", "canceled"),
+        ]) {
+            assert_eq!(row.as_object().unwrap().len(), 5);
+            assert_eq!(row["version"], 1);
+            assert_eq!(row["dispatch_attempt"], dispatch.to_string());
+            assert_eq!(row["stage"], stage);
+            assert_eq!(row["outcome"], outcome);
+            assert!(row["duration_ms"].as_u64().is_some());
         }
     }
 }

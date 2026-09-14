@@ -1593,13 +1593,16 @@ impl FirecrackerSandbox {
         // Override the network interface to use the new tap0 in our namespace
         let network_overrides = [("eth0", "tap0")];
         crate::observability::launch::phase(crate::observability::launch::Phase::LoadingSnapshot);
-        self.fc_instance
-            .load_snapshot_file(
-                &vm_state_src,
-                &mem_device_path,
-                &network_overrides,
-                false,
-                config.common.track_dirty_pages,
+        SandboxStageTimer::new("guest_boot")
+            .time(
+                "load_snapshot",
+                self.fc_instance.load_snapshot_file(
+                    &vm_state_src,
+                    &mem_device_path,
+                    &network_overrides,
+                    false,
+                    config.common.track_dirty_pages,
+                ),
             )
             .await?;
 

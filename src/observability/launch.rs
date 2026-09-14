@@ -47,6 +47,17 @@ impl Drop for Lease {
 }
 #[derive(Clone)]
 pub struct Observation(Arc<Lease>);
+impl Observation {
+    pub(crate) fn sample_attempt(&self) -> Option<Uuid> {
+        (self
+            .0
+            .record
+            .valid
+            .load(std::sync::atomic::Ordering::Relaxed)
+            && self.0.record.started.elapsed() < TTL)
+            .then_some(self.0.id)
+    }
+}
 #[derive(Default)]
 struct Registry(Mutex<HashMap<Uuid, Arc<Record>>>);
 impl Registry {
