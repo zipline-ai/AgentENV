@@ -1,3 +1,4 @@
+use crate::observability::prometheus::SandboxStageTimer;
 use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -239,8 +240,9 @@ where
         T: Send + 'static,
     {
         let (tx, rx) = oneshot::channel();
+        let observation = crate::observability::launch::current();
         tokio::spawn(async move {
-            let result = future.await;
+            let result = crate::observability::launch::scope(observation, future).await;
             if tx.send(result).is_err() {
                 debug!(
                     sandbox_id = %sandbox_id,
@@ -1973,6 +1975,7 @@ where
         self.ensure_accepting_lifecycle_operations()?;
 
         let sandbox_id = plan.sandbox_id();
+        crate::observability::launch::bind(sandbox_id.to_string());
         let transitional_state = plan.transitional_state();
 
         // Build and start the sandbox first, before making any state changes, so that we don't
@@ -2002,7 +2005,12 @@ where
                 .await;
             return Err(err);
         }
-        if let Err(source) = sandbox.start_nowait().await {
+        // Issuing VM start is not evidence of an answering guest or usable tool.
+        let boot_phases = SandboxStageTimer::new("guest_boot");
+        if let Err(source) = boot_phases
+            .time("vm_start_issued", sandbox.start_nowait())
+            .await
+        {
             warn!(error = %format_args!("{source:#}"), "failed to start sandbox");
             if let Err(stop_err) = sandbox.stop().await {
                 warn!(error = %format_args!("{stop_err:#}"), "failed to stop sandbox after start failure");
@@ -2028,6 +2036,7 @@ where
             return Err(OrchestratorError::ShuttingDown);
         }
 
+        crate::observability::launch::phase(crate::observability::launch::Phase::BootingGuest);
         let runtime_resources =
             resources_with_runtime_info(plan.resources(), sandbox.runtime_info());
         let transitional_metadata = plan.transitional_metadata().map(|metadata| {

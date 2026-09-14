@@ -1850,6 +1850,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn launch_status_requires_node_key_and_never_resolves_or_resumes_sandbox() {
+        use crate::observability::launch::{self, Phase};
+        let app = server::new(build_api().await);
+        let id = uuid::Uuid::new_v4();
+        let observation = launch::begin(id).unwrap();
+        launch::scope(Some(observation.clone()), async {
+            launch::phase(Phase::FetchingSnapshot);
+            launch::bind("exact-runtime-with-no-store-record".into());
+        })
+        .await;
+        let path = format!("/launch-observations/{id}");
+        assert_eq!(get_status(&app, &path, &[]).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            get_status(&app, &path, &[(API_KEY_HEADER, "wrong")]).await,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            get_status(&app, &path, &[(API_KEY_HEADER, TEST_API_KEY)]).await,
+            StatusCode::OK
+        );
+        let unknown = format!("/launch-observations/{}", uuid::Uuid::new_v4());
+        assert_eq!(
+            get_status(&app, &unknown, &[(API_KEY_HEADER, TEST_API_KEY)]).await,
+            StatusCode::NOT_FOUND
+        );
+        assert!(!launch::read(id).unwrap().done);
+        drop(observation);
+        assert!(launch::read(id).unwrap().done);
+    }
+
+    #[tokio::test]
     async fn control_plane_auth_is_separate_from_sandbox_auth() {
         let app = server::new(build_api().await);
 

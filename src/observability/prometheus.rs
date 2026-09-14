@@ -69,17 +69,9 @@ impl SandboxStageTimer {
         F: Future<Output = Result<T, E>>,
     {
         let _inflight = SandboxStageInFlight::new(self.operation, stage);
-        let start = Instant::now();
+        let mut metric = MetricGuard::operation_stage(self.operation, stage);
         let result = future.await;
-        let status = result_status(result.is_ok());
-        let elapsed = start.elapsed().as_secs_f64();
-        metrics::histogram!(
-            "agentenv_sandbox_stage_duration_seconds",
-            "operation" => self.operation,
-            "stage" => stage,
-            "status" => status,
-        )
-        .record(elapsed);
+        metric.finish(&result);
         result
     }
 }
@@ -118,6 +110,7 @@ pub struct MetricGuard {
     start: Instant,
     status: &'static str,
     recorded: bool,
+    node_sample: Option<(crate::observability::launch::Observation, &'static str)>,
 }
 
 #[derive(Clone, Copy)]
@@ -128,9 +121,35 @@ enum MetricGuardLabel {
         artifact: &'static str,
     },
     Stage(&'static str),
+    OperationStage(&'static str, &'static str),
+}
+
+fn node_sample_stage(operation: &str, stage: &str) -> Option<&'static str> {
+    match (operation, stage) {
+        ("create_warm", "load_snapshot") => Some("fetch_snapshot"),
+        ("guest_boot", "load_snapshot") => Some("load_snapshot"),
+        ("guest_boot", "vm_start_issued") => Some("vm_start_issued"),
+        ("guest_boot", "envd_ready") => Some("envd_ready"),
+        ("guest_boot", "memory_download_release") => Some("memory_download_release"),
+        ("guest_boot", "rootfs_download_release") => Some("rootfs_download_release"),
+        ("guest_boot", "envd_init") => Some("envd_init"),
+        _ => None,
+    }
 }
 
 impl MetricGuard {
+    fn operation_stage(operation: &'static str, stage: &'static str) -> Self {
+        Self {
+            metric: "agentenv_sandbox_stage_duration_seconds",
+            label: MetricGuardLabel::OperationStage(operation, stage),
+            start: Instant::now(),
+            status: "canceled",
+            recorded: false,
+            node_sample: crate::observability::launch::current()
+                .zip(node_sample_stage(operation, stage)),
+        }
+    }
+
     pub fn operation(metric: &'static str, operation: &'static str) -> Self {
         // A guard dropped before finish() is treated as cancellation. That
         // includes futures dropped by caller-side timeouts, which is useful
@@ -141,6 +160,7 @@ impl MetricGuard {
             start: Instant::now(),
             status: "canceled",
             recorded: false,
+            node_sample: None,
         }
     }
 
@@ -161,6 +181,7 @@ impl MetricGuard {
             start: Instant::now(),
             status: "canceled",
             recorded: false,
+            node_sample: None,
         }
     }
 
@@ -171,6 +192,7 @@ impl MetricGuard {
             start: Instant::now(),
             status: "canceled",
             recorded: false,
+            node_sample: None,
         }
     }
 
@@ -184,8 +206,36 @@ impl MetricGuard {
             return;
         }
         self.recorded = true;
-        let elapsed = self.start.elapsed().as_secs_f64();
+        let duration = self.start.elapsed();
+        let elapsed = duration.as_secs_f64();
+        if let Some((observation, stage)) = self.node_sample.as_ref() {
+            if let Some(dispatch_attempt) = observation.sample_attempt() {
+                let sample = serde_json::json!({
+                    "version": 1,
+                    "dispatch_attempt": dispatch_attempt,
+                    "stage": stage,
+                    "outcome": match self.status { "ok" => "success", "error" => "failed", _ => "canceled" },
+                    "duration_ms": duration.as_millis().min(u64::MAX as u128) as u64,
+                });
+                if let Ok(node_sample_json) = serde_json::to_string(&sample) {
+                    // Explicit opt-in sample; keep coordinates out of metric labels.
+                    tracing::info!(node_sample_json, "node launch phase sample");
+                }
+            }
+        }
         match self.label {
+            MetricGuardLabel::OperationStage(operation, stage) => {
+                // Numeric timing under the caller's protected trace context.
+                // Fixed labels only; no user, image URL or credential dimensions.
+                tracing::debug!(
+                    operation,
+                    stage,
+                    status = self.status,
+                    elapsed_seconds = elapsed,
+                    "sandbox stage timing"
+                );
+                metrics::histogram!(self.metric, "operation" => operation, "stage" => stage, "status" => self.status).record(elapsed);
+            }
             MetricGuardLabel::Operation(operation) => {
                 metrics::histogram!(
                     self.metric,
@@ -334,5 +384,175 @@ mod tests {
             http_route_label("/templates/tpl/builds/build/status"),
             "unmatched"
         );
+    }
+}
+
+#[cfg(test)]
+mod stage_tests {
+    use super::SandboxStageTimer;
+    use metrics::{
+        Counter, Gauge, Histogram, Key, KeyName, Metadata, Recorder, SharedString, Unit,
+    };
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Default)]
+    struct Capture(Arc<Mutex<Vec<(Key, f64)>>>);
+    struct RecordHistogram(Key, Capture);
+    impl metrics::HistogramFn for RecordHistogram {
+        fn record(&self, value: f64) {
+            self.1 .0.lock().unwrap().push((self.0.clone(), value));
+        }
+    }
+    impl Recorder for Capture {
+        fn describe_counter(&self, _: KeyName, _: Option<Unit>, _: SharedString) {}
+        fn describe_gauge(&self, _: KeyName, _: Option<Unit>, _: SharedString) {}
+        fn describe_histogram(&self, _: KeyName, _: Option<Unit>, _: SharedString) {}
+        fn register_counter(&self, _: &Key, _: &Metadata<'_>) -> Counter {
+            Counter::noop()
+        }
+        fn register_gauge(&self, _: &Key, _: &Metadata<'_>) -> Gauge {
+            Gauge::noop()
+        }
+        fn register_histogram(&self, key: &Key, _: &Metadata<'_>) -> Histogram {
+            Histogram::from_arc(Arc::new(RecordHistogram(key.clone(), self.clone())))
+        }
+    }
+    #[test]
+    fn stages_record_success_failure_and_dropped_future_once() {
+        let capture = Capture::default();
+        metrics::with_local_recorder(&capture, || {
+            tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    let timer = SandboxStageTimer::new("guest_boot");
+                    assert_eq!(
+                        timer.time("envd_ready", async { Ok::<_, ()>(7) }).await,
+                        Ok(7)
+                    );
+                    assert_eq!(
+                        timer.time("envd_ready", async { Err::<(), _>(9) }).await,
+                        Err(9)
+                    );
+                    let mut canceled = Box::pin(
+                        timer.time("envd_ready", std::future::pending::<Result<(), ()>>()),
+                    );
+                    assert!(futures::poll!(canceled.as_mut()).is_pending());
+                    drop(canceled);
+                });
+        });
+        let rows = capture.0.lock().unwrap();
+        assert_eq!(rows.len(), 3);
+        for ((key, duration), status) in rows.iter().zip(["ok", "error", "canceled"]) {
+            assert_eq!(key.name(), "agentenv_sandbox_stage_duration_seconds");
+            let labels: Vec<_> = key
+                .labels()
+                .map(|label| (label.key(), label.value()))
+                .collect();
+            assert_eq!(
+                labels,
+                vec![
+                    ("operation", "guest_boot"),
+                    ("stage", "envd_ready"),
+                    ("status", status)
+                ]
+            );
+            assert!(duration.is_finite() && *duration >= 0.0);
+        }
+    }
+}
+
+#[cfg(test)]
+mod node_sample_tests {
+    use super::SandboxStageTimer;
+    use crate::observability::launch;
+    use std::sync::{Arc, Mutex};
+    #[derive(Clone, Default)]
+    struct Writer(Arc<Mutex<Vec<u8>>>);
+    impl std::io::Write for Writer {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    #[test]
+    fn node_phase_samples_capture_dispatch_before_runtime_and_record_cancel_once() {
+        let writer = Writer::default();
+        let sink = writer.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .with_max_level(tracing::Level::INFO)
+            .with_writer(move || sink.clone())
+            .finish();
+        let dispatch = uuid::Uuid::new_v4();
+        tracing::subscriber::with_default(subscriber, || {
+            tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    let timer = SandboxStageTimer::new("guest_boot");
+                    timer
+                        .time("envd_ready", async { Ok::<(), ()>(()) })
+                        .await
+                        .unwrap();
+                    let (pending,) = launch::scope(launch::begin(dispatch), async {
+                        SandboxStageTimer::new("create_warm")
+                            .time("load_snapshot", async { Ok::<(), ()>(()) })
+                            .await
+                            .unwrap();
+                        timer
+                            .time("load_snapshot", async { Ok::<(), ()>(()) })
+                            .await
+                            .unwrap();
+                        timer
+                            .time("untrusted-extra-stage", async { Ok::<(), ()>(()) })
+                            .await
+                            .unwrap();
+                        assert!(timer
+                            .time("envd_ready", async { Err::<(), ()>(()) })
+                            .await
+                            .is_err());
+                        let mut pending = Box::pin(
+                            timer.time("vm_start_issued", std::future::pending::<Result<(), ()>>()),
+                        );
+                        assert!(futures::poll!(pending.as_mut()).is_pending());
+                        (pending,)
+                    })
+                    .await;
+                    assert!(launch::current().is_none());
+                    drop(pending);
+                });
+        });
+        let output = String::from_utf8(writer.0.lock().unwrap().clone()).unwrap();
+        let samples: Vec<serde_json::Value> = output
+            .lines()
+            .filter_map(|line| {
+                let row: serde_json::Value = serde_json::from_str(line).unwrap();
+                if row["fields"]["message"] != "node launch phase sample" {
+                    return None;
+                }
+                Some(
+                    serde_json::from_str(row["fields"]["node_sample_json"].as_str().unwrap())
+                        .unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(samples.len(), 4, "{output}");
+        for (row, (stage, outcome)) in samples.iter().zip([
+            ("fetch_snapshot", "success"),
+            ("load_snapshot", "success"),
+            ("envd_ready", "failed"),
+            ("vm_start_issued", "canceled"),
+        ]) {
+            assert_eq!(row.as_object().unwrap().len(), 5);
+            assert_eq!(row["version"], 1);
+            assert_eq!(row["dispatch_attempt"], dispatch.to_string());
+            assert_eq!(row["stage"], stage);
+            assert_eq!(row["outcome"], outcome);
+            assert!(row["duration_ms"].as_u64().is_some());
+        }
     }
 }
