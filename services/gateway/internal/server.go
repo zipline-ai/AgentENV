@@ -105,7 +105,7 @@ func (s *Server) Handler() http.Handler {
 	// decoding %2F → / and issuing 301 redirects), which breaks proxy
 	// forwarding of percent-encoded path segments such as /files/%2F.
 	core := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isLaunchObservationPath(r.URL.Path) {
+		if isLaunchObservationPath(r.URL.Path) || isLaunchObservationHealthRequest(r) {
 			s.handleLaunchObservation(w, r)
 			return
 		}
@@ -135,9 +135,6 @@ func (s *Server) Handler() http.Handler {
 			}
 			if r.URL.Path == "/health" {
 				// Keep load balancer health checks local when they are not sandbox-routed.
-				// Old gateways also serve this path locally. Clients must discover
-				// support here before using a route old gateways might schedule.
-				w.Header().Set("X-Agentenv-Launch-Observation-Version", "1")
 				w.WriteHeader(http.StatusNoContent)
 			} else {
 				// Gateway Prometheus metrics use the separate metrics listener. Keep
@@ -893,8 +890,9 @@ func isExplicitProxyPath(path string) bool {
 
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		dataPlane := !isLaunchObservationPath(r.URL.Path) && s.isSandboxDataPlaneRequest(r)
-		if dataPlane || r.URL.Path == "/health" || r.URL.Path == "/metrics" {
+		observation := isLaunchObservationPath(r.URL.Path) || isLaunchObservationHealthRequest(r)
+		dataPlane := !observation && s.isSandboxDataPlaneRequest(r)
+		if dataPlane || (!observation && (r.URL.Path == "/health" || r.URL.Path == "/metrics")) {
 			// Sandbox-scoped ingress and envd authorization depend on runtime
 			// metadata and are enforced by the owning runtime node.
 			next.ServeHTTP(w, r)

@@ -299,7 +299,7 @@ func TestLaunchObservationDiscardsResponseAfterRouteInvalidation(t *testing.T) {
 	}
 }
 
-func TestLocalHealthAdvertisesLaunchObservationWithoutDownstreamCalls(t *testing.T) {
+func TestLocalHealthStaysLocalWithoutObservationQuery(t *testing.T) {
 	var calls atomic.Int32
 	s := newTestServer(t, stubSchedulerClient{
 		scheduleFunc: func(context.Context, *schedulerv1.ScheduleRequest, ...grpc.CallOption) (*schedulerv1.ScheduleResponse, error) {
@@ -319,8 +319,48 @@ func TestLocalHealthAdvertisesLaunchObservationWithoutDownstreamCalls(t *testing
 		if w.Code != http.StatusNoContent || w.Body.Len() != 0 || calls.Load() != 0 {
 			t.Fatalf("health changed: status%d body%q downstream%d", w.Code, w.Body.String(), calls.Load())
 		}
-		if got := w.Header().Get("X-Agentenv-Launch-Observation-Version"); got != "1" {
-			t.Fatalf("launch observation version=%q, want1", got)
+	}
+}
+
+func TestLaunchObservationHealthQueryRequiresAuthAndPinsNode(t *testing.T) {
+	const id = "550e8400-e29b-41d4-a716-446655440000"
+	var calls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.Method != "GET" || r.URL.Path != "/launch-observations/"+id || r.URL.RawQuery != "" || r.Header.Get(headerAPIKey) != testAPIKey {
+			t.Errorf("unexpected node request %s %s", r.Method, r.URL.String())
 		}
+		fmt.Fprintf(w, `{"attempt_id":%q,"phase":"loading_snapshot","elapsed_ms":5,"done":false}`, id)
+	}))
+	defer upstream.Close()
+	s := newTestServer(t, stubSchedulerClient{}, time.Second, 1024)
+	now := time.Now()
+	s.launchObservations.reserve(id, now)
+	s.launchObservations.bind(id, &schedulerv1.Node{NodeId: "exact", Endpoint: upstream.URL}, now)
+	for _, tc := range []struct {
+		query, key string
+		want       int
+	}{
+		{"launch_observation=" + id, "", 401},
+		{"launch_observation=" + id, "wrong", 401},
+		{"launch_observation=invalid", testAPIKey, 400},
+		{"launch_observation=", testAPIKey, 400},
+		{"launch_observation=" + id + "&launch_observation=" + id, testAPIKey, 400},
+		{"launch_observation=550e8400-e29b-41d4-a716-446655440001", testAPIKey, 404},
+		{"launch_observation=" + id, testAPIKey, 200},
+	} {
+		r := httptest.NewRequest("GET", "/health?"+tc.query, nil)
+		r.Header.Set(headerAPIKey, tc.key)
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		if w.Code != tc.want {
+			t.Fatalf("%s: got%d want%d", tc.query, w.Code, tc.want)
+		}
+		if tc.want != 200 && calls.Load() != 0 {
+			t.Fatal("denial reached node")
+		}
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("node calls=%d", calls.Load())
 	}
 }

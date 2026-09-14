@@ -34,6 +34,12 @@ func validLaunchAttempt(id string) bool {
 func isLaunchObservationPath(path string) bool {
 	return path == "/launch-observations" || strings.HasPrefix(path, "/launch-observations/")
 }
+
+// Old gateways answer this existing local path with 204 and ignore its query.
+// Clients can inspect progress without probing an unknown schedulable route.
+func isLaunchObservationHealthRequest(r *http.Request) bool {
+	return r.URL.Path == "/health" && r.URL.Query().Has("launch_observation")
+}
 func isObservedLaunchRequest(r *http.Request) bool {
 	if r.Method != http.MethodPost {
 		return false
@@ -95,6 +101,14 @@ func (m *launchObservationRoutes) lookup(id string, now time.Time) (launchObserv
 func (s *Server) handleLaunchObservation(w http.ResponseWriter, r *http.Request) {
 	setGatewayRouteSource(w, routeSourceGateway)
 	id := strings.TrimPrefix(r.URL.Path, "/launch-observations/")
+	if isLaunchObservationHealthRequest(r) {
+		values := r.URL.Query()["launch_observation"]
+		if len(values) != 1 {
+			http.Error(w, "invalid launch attempt", http.StatusBadRequest)
+			return
+		}
+		id = values[0]
+	}
 	if !validLaunchAttempt(id) {
 		http.Error(w, "invalid launch attempt", http.StatusBadRequest)
 		return
@@ -108,7 +122,7 @@ func (s *Server) handleLaunchObservation(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
-	target, err := joinUpstream(entry.endpoint, r.URL.Path, "", "")
+	target, err := joinUpstream(entry.endpoint, "/launch-observations/"+id, "", "")
 	if err != nil {
 		http.Error(w, "observation unavailable", http.StatusBadGateway)
 		return
