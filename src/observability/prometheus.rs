@@ -69,17 +69,9 @@ impl SandboxStageTimer {
         F: Future<Output = Result<T, E>>,
     {
         let _inflight = SandboxStageInFlight::new(self.operation, stage);
-        let start = Instant::now();
+        let mut metric = MetricGuard::operation_stage(self.operation, stage);
         let result = future.await;
-        let status = result_status(result.is_ok());
-        let elapsed = start.elapsed().as_secs_f64();
-        metrics::histogram!(
-            "agentenv_sandbox_stage_duration_seconds",
-            "operation" => self.operation,
-            "stage" => stage,
-            "status" => status,
-        )
-        .record(elapsed);
+        metric.finish(&result);
         result
     }
 }
@@ -128,9 +120,20 @@ enum MetricGuardLabel {
         artifact: &'static str,
     },
     Stage(&'static str),
+    OperationStage(&'static str, &'static str),
 }
 
 impl MetricGuard {
+    fn operation_stage(operation: &'static str, stage: &'static str) -> Self {
+        Self {
+            metric: "agentenv_sandbox_stage_duration_seconds",
+            label: MetricGuardLabel::OperationStage(operation, stage),
+            start: Instant::now(),
+            status: "canceled",
+            recorded: false,
+        }
+    }
+
     pub fn operation(metric: &'static str, operation: &'static str) -> Self {
         // A guard dropped before finish() is treated as cancellation. That
         // includes futures dropped by caller-side timeouts, which is useful
@@ -186,6 +189,18 @@ impl MetricGuard {
         self.recorded = true;
         let elapsed = self.start.elapsed().as_secs_f64();
         match self.label {
+            MetricGuardLabel::OperationStage(operation, stage) => {
+                // Numeric timing under the caller's protected trace context.
+                // Fixed labels only; no user, image URL or credential dimensions.
+                tracing::debug!(
+                    operation,
+                    stage,
+                    status = self.status,
+                    elapsed_seconds = elapsed,
+                    "sandbox stage timing"
+                );
+                metrics::histogram!(self.metric, "operation" => operation, "stage" => stage, "status" => self.status).record(elapsed);
+            }
             MetricGuardLabel::Operation(operation) => {
                 metrics::histogram!(
                     self.metric,
@@ -334,5 +349,80 @@ mod tests {
             http_route_label("/templates/tpl/builds/build/status"),
             "unmatched"
         );
+    }
+}
+
+#[cfg(test)]
+mod stage_tests {
+    use super::SandboxStageTimer;
+    use metrics::{
+        Counter, Gauge, Histogram, Key, KeyName, Metadata, Recorder, SharedString, Unit,
+    };
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Default)]
+    struct Capture(Arc<Mutex<Vec<(Key, f64)>>>);
+    struct RecordHistogram(Key, Capture);
+    impl metrics::HistogramFn for RecordHistogram {
+        fn record(&self, value: f64) {
+            self.1 .0.lock().unwrap().push((self.0.clone(), value));
+        }
+    }
+    impl Recorder for Capture {
+        fn describe_counter(&self, _: KeyName, _: Option<Unit>, _: SharedString) {}
+        fn describe_gauge(&self, _: KeyName, _: Option<Unit>, _: SharedString) {}
+        fn describe_histogram(&self, _: KeyName, _: Option<Unit>, _: SharedString) {}
+        fn register_counter(&self, _: &Key, _: &Metadata<'_>) -> Counter {
+            Counter::noop()
+        }
+        fn register_gauge(&self, _: &Key, _: &Metadata<'_>) -> Gauge {
+            Gauge::noop()
+        }
+        fn register_histogram(&self, key: &Key, _: &Metadata<'_>) -> Histogram {
+            Histogram::from_arc(Arc::new(RecordHistogram(key.clone(), self.clone())))
+        }
+    }
+    #[test]
+    fn stages_record_success_failure_and_dropped_future_once() {
+        let capture = Capture::default();
+        metrics::with_local_recorder(&capture, || {
+            tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap()
+                .block_on(async {
+                    let timer = SandboxStageTimer::new("guest_boot");
+                    assert_eq!(
+                        timer.time("envd_ready", async { Ok::<_, ()>(7) }).await,
+                        Ok(7)
+                    );
+                    assert_eq!(
+                        timer.time("envd_ready", async { Err::<(), _>(9) }).await,
+                        Err(9)
+                    );
+                    let mut canceled = Box::pin(
+                        timer.time("envd_ready", std::future::pending::<Result<(), ()>>()),
+                    );
+                    assert!(futures::poll!(canceled.as_mut()).is_pending());
+                    drop(canceled);
+                });
+        });
+        let rows = capture.0.lock().unwrap();
+        assert_eq!(rows.len(), 3);
+        for ((key, duration), status) in rows.iter().zip(["ok", "error", "canceled"]) {
+            assert_eq!(key.name(), "agentenv_sandbox_stage_duration_seconds");
+            let labels: Vec<_> = key
+                .labels()
+                .map(|label| (label.key(), label.value()))
+                .collect();
+            assert_eq!(
+                labels,
+                vec![
+                    ("operation", "guest_boot"),
+                    ("stage", "envd_ready"),
+                    ("status", status)
+                ]
+            );
+            assert!(duration.is_finite() && *duration >= 0.0);
+        }
     }
 }

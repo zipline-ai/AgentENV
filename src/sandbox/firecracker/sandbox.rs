@@ -1,3 +1,4 @@
+use crate::observability::prometheus::SandboxStageTimer;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -599,31 +600,52 @@ impl FirecrackerSandbox {
         let Some(envd_instance) = self.envd_instance.as_ref() else {
             return Err(anyhow::anyhow!("envd instance not initialized"));
         };
-        envd_instance
-            .wait_for_ready(
-                self.runtime_policy.envd_timeout,
-                self.runtime_policy.envd_poll_interval,
+        // Time the existing futures; these observations add no readiness polls
+        // and do not alter the caller's timeout or start-issuance semantics.
+        let phases = SandboxStageTimer::new("guest_boot");
+        phases
+            .time(
+                "envd_ready",
+                envd_instance.wait_for_ready(
+                    self.runtime_policy.envd_timeout,
+                    self.runtime_policy.envd_poll_interval,
+                ),
             )
             .await?;
         if let Some(device_key) = &self.mem_snapshot_image_config_path {
             // envd is up: release held background downloads for this memory
             // device. Best-effort — downloads would also start after the
             // fallback timeout.
-            UblkDeviceManager::global()
-                .notify_sandbox_ready(device_key)
-                .await;
+            phases
+                .time("memory_download_release", async {
+                    UblkDeviceManager::global()
+                        .notify_sandbox_ready(device_key)
+                        .await;
+                    Ok::<(), std::convert::Infallible>(())
+                })
+                .await
+                .unwrap_or_else(|never| match never {});
         }
         if let Some(device_key) = &self.rootfs_image_config_path {
             // Same release for the rootfs image's background download.
-            UblkDeviceManager::global()
-                .notify_sandbox_ready(device_key)
-                .await;
+            phases
+                .time("rootfs_download_release", async {
+                    UblkDeviceManager::global()
+                        .notify_sandbox_ready(device_key)
+                        .await;
+                    Ok::<(), std::convert::Infallible>(())
+                })
+                .await
+                .unwrap_or_else(|never| match never {});
         }
-        envd_instance
-            .init(
-                self.launch.common().env_vars.clone(),
-                self.launch.common().default_workdir.clone(),
-                self.launch.common().default_user.clone(),
+        phases
+            .time(
+                "envd_init",
+                envd_instance.init(
+                    self.launch.common().env_vars.clone(),
+                    self.launch.common().default_workdir.clone(),
+                    self.launch.common().default_user.clone(),
+                ),
             )
             .await
     }

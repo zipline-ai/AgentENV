@@ -1,3 +1,4 @@
+use crate::observability::prometheus::SandboxStageTimer;
 use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -2002,7 +2003,12 @@ where
                 .await;
             return Err(err);
         }
-        if let Err(source) = sandbox.start_nowait().await {
+        // Issuing VM start is not evidence of an answering guest or usable tool.
+        let boot_phases = SandboxStageTimer::new("guest_boot");
+        if let Err(source) = boot_phases
+            .time("vm_start_issued", sandbox.start_nowait())
+            .await
+        {
             warn!(error = %format_args!("{source:#}"), "failed to start sandbox");
             if let Err(stop_err) = sandbox.stop().await {
                 warn!(error = %format_args!("{stop_err:#}"), "failed to stop sandbox after start failure");
