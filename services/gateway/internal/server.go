@@ -135,6 +135,9 @@ func (s *Server) Handler() http.Handler {
 			}
 			if r.URL.Path == "/health" {
 				// Keep load balancer health checks local when they are not sandbox-routed.
+				// Old gateways also serve this path locally. Clients must discover
+				// support here before using a route old gateways might schedule.
+				w.Header().Set("X-Agentenv-Launch-Observation-Version", "1")
 				w.WriteHeader(http.StatusNoContent)
 			} else {
 				// Gateway Prometheus metrics use the separate metrics listener. Keep

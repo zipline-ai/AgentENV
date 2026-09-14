@@ -298,3 +298,29 @@ func TestLaunchObservationDiscardsResponseAfterRouteInvalidation(t *testing.T) {
 		})
 	}
 }
+
+func TestLocalHealthAdvertisesLaunchObservationWithoutDownstreamCalls(t *testing.T) {
+	var calls atomic.Int32
+	s := newTestServer(t, stubSchedulerClient{
+		scheduleFunc: func(context.Context, *schedulerv1.ScheduleRequest, ...grpc.CallOption) (*schedulerv1.ScheduleResponse, error) {
+			calls.Add(1)
+			return nil, fmt.Errorf("unexpected scheduling")
+		},
+		lookupNodeFunc: func(context.Context, *schedulerv1.LookupNodeRequest, ...grpc.CallOption) (*schedulerv1.LookupNodeResponse, error) {
+			calls.Add(1)
+			return nil, fmt.Errorf("unexpected lookup")
+		},
+	}, time.Second, 1024)
+	for _, key := range []string{"", testAPIKey} {
+		r := httptest.NewRequest("GET", "/health", nil)
+		r.Header.Set(headerAPIKey, key)
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		if w.Code != http.StatusNoContent || w.Body.Len() != 0 || calls.Load() != 0 {
+			t.Fatalf("health changed: status%d body%q downstream%d", w.Code, w.Body.String(), calls.Load())
+		}
+		if got := w.Header().Get("X-Agentenv-Launch-Observation-Version"); got != "1" {
+			t.Fatalf("launch observation version=%q, want1", got)
+		}
+	}
+}
