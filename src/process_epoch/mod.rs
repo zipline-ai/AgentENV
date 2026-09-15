@@ -72,10 +72,72 @@ pub struct Enrollment {
     pub closed: bool,
 }
 
+/// Persisted bytes are historical evidence, not fresh forwarding authority.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OriginalCloseRequest {
+    pub body: Vec<u8>,
+    pub envelope: Vec<u8>,
+    pub signature: Vec<u8>,
+    pub descriptor: Vec<u8>,
+}
+
+impl OriginalCloseRequest {
+    // Structural consistency only. The authenticated participant checks signatures
+    // against independently enrolled keys before this storage primitive is called.
+    fn validate(&self, operation: &Operation) -> anyhow::Result<()> {
+        use sha2::{Digest, Sha256};
+        wire::decode_canonical("SealRequest", &self.body)?;
+        wire::decode_canonical("SignedEnvelope", &self.envelope)?;
+        wire::decode_canonical("Descriptor", &self.descriptor)?;
+        let request: wire::SealRequest = serde_json::from_slice(&self.body)?;
+        let envelope: wire::SignedEnvelope = serde_json::from_slice(&self.envelope)?;
+        let descriptor: wire::Descriptor = serde_json::from_slice(&self.descriptor)?;
+        let b = &request.binding;
+        let hash = format!("{:x}", Sha256::digest(&self.body));
+        let descriptor_hash = format!("{:x}", Sha256::digest(&self.descriptor));
+        anyhow::ensure!(
+            self.signature.len() == 64
+                && envelope.domain == "agentenv-process-epoch/seal/v1"
+                && envelope.signer == operation.allocation.controller
+                && envelope.body_sha256 == hash
+                && envelope.request_sha256 == hash
+                && operation.request_sha256 == hash
+                && b.operation_id == operation.operation_id.to_string()
+                && request.expected_session_id == operation.epoch_id.to_string()
+                && b.tenant_id == operation.allocation.tenant_id
+                && b.sandbox_id == operation.allocation.sandbox_id
+                && b.runtime_id == operation.allocation.runtime_id.to_string()
+                && b.runtime_incarnation == operation.allocation.runtime_incarnation.to_string()
+                && b.enrollment_revision == operation.allocation.enrollment_revision
+                && b.descriptor_sha256 == descriptor_hash
+                && envelope.descriptor_sha256 == descriptor_hash
+                && envelope.runtime_id == b.runtime_id
+                && envelope.runtime_incarnation == b.runtime_incarnation
+                && envelope.enrollment_revision == b.enrollment_revision
+                && envelope.node_id == b.node_id
+                && envelope.node_incarnation == b.node_incarnation
+                && descriptor.node_id == b.node_id
+                && descriptor.node_incarnation == b.node_incarnation
+                && descriptor.runtime_id == b.runtime_id
+                && descriptor.runtime_incarnation == b.runtime_incarnation
+                && descriptor.enrollment_revision == b.enrollment_revision
+                && descriptor.guest_boot_id == b.guest_boot_id
+                && descriptor.process_endpoint == b.process_endpoint
+                && descriptor.guest_build_sha256 == b.guest_build_sha256
+                && descriptor.capabilities_sha256 == b.capabilities_sha256,
+            "original process request conflict"
+        );
+        Ok(())
+    }
+}
+
 // Internal closing intent. Neither the inventory nor its hash proves cessation.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ClosingIntent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    original: Option<OriginalCloseRequest>,
     operation: Operation,
     inventory: Vec<Operation>,
     inventory_sha256: String,
@@ -311,7 +373,46 @@ impl HostLedger {
     }
     /// Claim a cooperative close and close admission in the same durable batch.
     /// This acknowledges only intent. No guest I/O or cessation evidence occurs here.
+    pub async fn begin_close_recorded(
+        &self,
+        operation: Operation,
+        original: OriginalCloseRequest,
+    ) -> anyhow::Result<bool> {
+        original.validate(&operation)?;
+        self.begin_close_inner(operation, Some(original)).await
+    }
+    /// Historical lookup only. The caller still needs authenticated lookup authority;
+    /// returning these bytes never grants permission to retry delivery.
+    pub async fn original_close_request(
+        &self,
+        operation: &Operation,
+    ) -> anyhow::Result<OriginalCloseRequest> {
+        self.validate(operation)?;
+        let _guard = self.serial.lock().await;
+        self.lookup(operation)
+            .await?
+            .context("process claim missing")?;
+        let raw = self
+            .db
+            .get(b"closing_intent".to_vec())
+            .await?
+            .context("original close request unavailable")?;
+        let intent: ClosingIntent = serde_json::from_slice(&raw)?;
+        anyhow::ensure!(&intent.operation == operation, "process close conflict");
+        let original = intent
+            .original
+            .context("original close request unavailable")?;
+        original.validate(operation)?;
+        Ok(original)
+    }
     pub async fn begin_close(&self, operation: Operation) -> anyhow::Result<bool> {
+        self.begin_close_inner(operation, None).await
+    }
+    async fn begin_close_inner(
+        &self,
+        operation: Operation,
+        original: Option<OriginalCloseRequest>,
+    ) -> anyhow::Result<bool> {
         self.validate(&operation)?;
         let this = self.clone();
         tokio::spawn(async move {
@@ -321,6 +422,18 @@ impl HostLedger {
                 let saved: Receipt = serde_json::from_slice(&raw)?;
                 if saved.operation != operation {
                     bail!("process operation conflict");
+                }
+                if let Some(expected) = &original {
+                    let raw = this
+                        .db
+                        .get(b"closing_intent".to_vec())
+                        .await?
+                        .context("original close request unavailable")?;
+                    let intent: ClosingIntent = serde_json::from_slice(&raw)?;
+                    anyhow::ensure!(
+                        intent.operation == operation && intent.original.as_ref() == Some(expected),
+                        "process close conflict"
+                    );
                 }
                 return Ok(false);
             }
@@ -349,6 +462,7 @@ impl HostLedger {
             use sha2::{Digest, Sha256};
             let inventory_sha256 = format!("{:x}", Sha256::digest(serde_json::to_vec(&inventory)?));
             let intent = ClosingIntent {
+                original,
                 operation: operation.clone(),
                 inventory,
                 inventory_sha256,

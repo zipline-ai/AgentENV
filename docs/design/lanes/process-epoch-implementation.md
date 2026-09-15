@@ -98,3 +98,19 @@ Still required for commit 2: authenticated provisioning/response chain, durable
 original request and once-only exact transport, saved-operation recovery, refusal/
 transport barriers and the final validation run. No managed capability, lifecycle
 bind/release or terminal/input consumer is enabled by this checkpoint.
+
+### Original close request persistence
+
+The close transaction now saves the original canonical request, signed envelope,
+signature and captured descriptor with its frozen inventory. Structural binding and
+hash checks reject mismatched epochs/allocations before writing. Signature authority
+still belongs to the authenticated participant; the ledger does not authenticate a
+caller. Replays require identical saved bytes. An older hash-only claim cannot be
+upgraded into a recorded request. Restart lookup returns historical bytes and leaves
+admission unreconciled; it never grants another dispatch.
+
+Red: `cargo test --locked --lib process_epoch::tests::original_close -- --nocapture`
+exit 101, both regressions failed. Green: `cargo test --locked --lib process_epoch::
+-- --nocapture` exit 0, 20 passed. Logs: `/tmp/lanes/aenv3-c2-original-{red,green}.log`.
+Commit 2 remains incomplete until authenticated provisioning, once-only dispatch,
+response mirroring and exact recovery are connected and tested.

@@ -431,3 +431,115 @@ async fn competing_close_claims_freeze_one_inventory_and_restart_never_resends(
     assert!(ledger.enrollment().await?.closed);
     Ok(())
 }
+
+fn original_close_fixture() -> (Operation, OriginalCloseRequest) {
+    fn bytes(file: &str, field: &str) -> Vec<u8> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("testdata/process-epoch-vectors/v1");
+        let v: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(root.join(file)).unwrap()).unwrap();
+        let s = v[field].as_str().unwrap();
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
+    }
+    let original = OriginalCloseRequest {
+        body: bytes("SealRequest.json", "canonical_hex"),
+        envelope: bytes("SealRequest.json", "envelope_hex"),
+        signature: bytes("SealRequest.json", "signature_hex"),
+        descriptor: bytes("Descriptor.json", "canonical_hex"),
+    };
+    let request: wire::SealRequest = serde_json::from_slice(&original.body).unwrap();
+    let envelope: wire::SignedEnvelope = serde_json::from_slice(&original.envelope).unwrap();
+    let b = request.binding;
+    (
+        Operation {
+            allocation: Allocation {
+                controller: envelope.signer,
+                tenant_id: b.tenant_id,
+                sandbox_id: b.sandbox_id,
+                runtime_id: b.runtime_id.parse().unwrap(),
+                runtime_incarnation: b.runtime_incarnation.parse().unwrap(),
+                enrollment_revision: b.enrollment_revision,
+            },
+            epoch_id: request.expected_session_id.parse().unwrap(),
+            operation_id: b.operation_id.parse().unwrap(),
+            request_sha256: envelope.request_sha256,
+        },
+        original,
+    )
+}
+
+#[tokio::test]
+async fn original_close_bytes_survive_restart_without_authorizing_another_dispatch(
+) -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("ledger");
+    let (op, original) = original_close_fixture();
+    let ledger = HostLedger::initialize(path.clone(), op.allocation.clone()).await?;
+    assert!(
+        ledger
+            .begin_close_recorded(op.clone(), original.clone())
+            .await?
+    );
+    assert_eq!(ledger.original_close_request(&op).await?, original);
+    assert_eq!(ledger.enrollment().await?.admission, Admission::Closed);
+    assert_eq!(ledger.lookup(&op).await?.unwrap().evidence_class, None);
+    let rows = ledger.db.entries().await?;
+    let mut changed = original.clone();
+    changed.signature[0] ^= 1;
+    assert!(ledger
+        .begin_close_recorded(op.clone(), changed)
+        .await
+        .is_err());
+    assert_eq!(rows, ledger.db.entries().await?);
+    drop(ledger);
+    let ledger = HostLedger::reopen(path, op.allocation.clone()).await?;
+    assert_eq!(ledger.original_close_request(&op).await?, original);
+    assert!(!ledger.begin_close_recorded(op.clone(), original).await?);
+    assert_eq!(
+        ledger.enrollment().await?.admission,
+        Admission::Unreconciled
+    );
+    assert_eq!(ledger.lookup(&op).await?.unwrap().evidence_class, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn original_close_refuses_changed_binding_and_missing_history_without_writes(
+) -> anyhow::Result<()> {
+    let (op, original) = original_close_fixture();
+    let dir = tempfile::tempdir()?;
+    let ledger = HostLedger::initialize(dir.path().join("ledger"), op.allocation.clone()).await?;
+    let before = ledger.db.entries().await?;
+    let mut wrong = op.clone();
+    wrong.epoch_id = Uuid::new_v4();
+    assert!(ledger
+        .begin_close_recorded(wrong, original.clone())
+        .await
+        .is_err());
+    let mut changed = original.clone();
+    changed.body.push(b' ');
+    assert!(ledger
+        .begin_close_recorded(op.clone(), changed)
+        .await
+        .is_err());
+    let mut changed = original.clone();
+    changed.descriptor.push(b' ');
+    assert!(ledger
+        .begin_close_recorded(op.clone(), changed)
+        .await
+        .is_err());
+    assert_eq!(before, ledger.db.entries().await?);
+    // A prior hash-only claim cannot be upgraded into captured request authority.
+    assert!(ledger.claim(op.clone()).await?);
+    let before = ledger.db.entries().await?;
+    assert!(ledger
+        .begin_close_recorded(op.clone(), original)
+        .await
+        .is_err());
+    assert!(ledger.original_close_request(&op).await.is_err());
+    assert_eq!(before, ledger.db.entries().await?);
+    Ok(())
+}
