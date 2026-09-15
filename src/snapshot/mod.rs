@@ -1,4 +1,5 @@
 mod artifact_cache;
+pub mod envelope;
 pub mod image_export;
 mod manager;
 #[doc(hidden)]
