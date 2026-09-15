@@ -29,6 +29,10 @@ where
         .route("/metrics", get(metrics_handler))
         .layer(middleware::from_fn_with_state(
             api_impl.clone(),
+            super::impls::async_restore::dispatch::<I>,
+        ))
+        .layer(middleware::from_fn_with_state(
+            api_impl.clone(),
             proxy::sandbox_proxy_classifier::<I>,
         ))
         .layer(middleware::from_fn_with_state(

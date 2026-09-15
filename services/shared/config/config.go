@@ -156,6 +156,7 @@ func parseSchedulerDuration(raw json.RawMessage, field string) (time.Duration, e
 }
 
 type GatewayConfig struct {
+	OperationPinLookupURL  string        `json:"operation_pin_lookup_url"`
 	HTTPListenAddr         string        `json:"http_listen_addr"`
 	MetricsListenAddr      string        `json:"metrics_listen_addr"`
 	SchedulerAddr          string        `json:"scheduler_addr"`
@@ -170,6 +171,7 @@ type GatewayConfig struct {
 
 func (g *GatewayConfig) UnmarshalJSON(data []byte) error {
 	type wire struct {
+		OperationPinLookupURL  *string         `json:"operation_pin_lookup_url"`
 		HTTPListenAddr         *string         `json:"http_listen_addr"`
 		MetricsListenAddr      *string         `json:"metrics_listen_addr"`
 		SchedulerAddr          *string         `json:"scheduler_addr"`
@@ -183,6 +185,9 @@ func (g *GatewayConfig) UnmarshalJSON(data []byte) error {
 	parsed := wire{}
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return err
+	}
+	if parsed.OperationPinLookupURL != nil {
+		g.OperationPinLookupURL = *parsed.OperationPinLookupURL
 	}
 
 	if parsed.HTTPListenAddr != nil {

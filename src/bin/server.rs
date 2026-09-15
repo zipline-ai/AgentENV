@@ -118,7 +118,7 @@ async fn main() -> anyhow::Result<()> {
     let observability = if observability_config.enabled {
         Some(Arc::new(
             ObservabilityService::new(
-                identity,
+                identity.clone(),
                 Arc::clone(&orchestrator),
                 config.resolved_cpu_template_helper(),
                 cluster_cpu_arc,
@@ -143,7 +143,7 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
-    let api_impl = Arc::new(ApiImpl::new(
+    let api_impl = ApiImpl::new(
         Arc::clone(&orchestrator),
         snapshot_manager,
         template_builder,
@@ -151,8 +151,15 @@ async fn main() -> anyhow::Result<()> {
         observability,
         config.sandbox_proxy.domains.clone(),
         api_key,
-    ));
-    let app = server::new(api_impl);
+    );
+    let api_impl = if config.async_restore_enabled {
+        api_impl
+            .with_async_restore(identity, config.home_path.join("sandbox-operations"))
+            .await?
+    } else {
+        api_impl
+    };
+    let app = server::new(Arc::new(api_impl));
     let shutdown_orchestrator = Arc::clone(&orchestrator);
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 

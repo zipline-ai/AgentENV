@@ -1,12 +1,27 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestGatewayOperationPinCallbackIsExplicitConfiguration(t *testing.T) {
+	cfg := defaultConfig("gateway")
+	if cfg.Gateway.OperationPinLookupURL != "" {
+		t.Fatal("operation pins enabled without configuration")
+	}
+	const endpoint = "https://app.test/api/runtime-operation-pins/lookup"
+	if err := json.Unmarshal([]byte(`{"operation_pin_lookup_url":"`+endpoint+`"}`), &cfg.Gateway); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Gateway.OperationPinLookupURL != endpoint {
+		t.Fatal("configured operation pin endpoint was not retained")
+	}
+}
 
 func TestDefaultConfigUsesAutoLogFormat(t *testing.T) {
 	cfg := defaultConfig("gateway")

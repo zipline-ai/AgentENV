@@ -4769,3 +4769,169 @@ async fn fork_sandbox_register_failure_cleans_up_metrics() -> Result<()> {
     orchestrator.delete_sandbox(source.id).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn exact_restore_allocation_rejects_legacy_runtime_before_build() -> Result<()> {
+    setup();
+    let behavior = Arc::new(MockBehavior::new());
+    let builds = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let starts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let start_count = starts.clone();
+    behavior.set_on_operation(
+        MockOperation::StartNowait,
+        Arc::new(move || {
+            start_count.fetch_add(1, Ordering::SeqCst);
+        }),
+    );
+
+    let orchestrator = make_orchestrator_without_background_with_factory(
+        InMemoryMetadataStore::new(),
+        ExactAllocationRecordingFactory {
+            inner: MockBackendFactory::with_behavior(behavior.clone()),
+            builds: builds.clone(),
+        },
+    );
+    let id = SandboxId::new();
+    let original = orchestrator
+        .launch_sandbox(create_launch_plan_with_resources(id))
+        .await?;
+    let original_handle = orchestrator
+        .sandboxes
+        .read()
+        .await
+        .get(&id)
+        .unwrap()
+        .clone();
+    let before = serde_json::to_value(&original).unwrap();
+    let before_builds = builds.load(Ordering::SeqCst);
+    let before_starts = starts.load(Ordering::SeqCst);
+    let before_stops = behavior.stop_calls();
+    let mut plan = create_launch_plan_with_resources(id);
+    if let LaunchPlan::Create(ref mut create) = plan {
+        create.metadata.operation_incarnation = Some(Uuid::new_v4());
+    }
+    assert!(orchestrator.launch_sandbox(plan).await.is_err());
+    assert_eq!(
+        builds.load(Ordering::SeqCst),
+        before_builds,
+        "collision entered backend build"
+    );
+    assert_eq!(
+        starts.load(Ordering::SeqCst),
+        before_starts,
+        "collision started another runtime"
+    );
+    assert_eq!(
+        behavior.stop_calls(),
+        before_stops,
+        "collision entered cleanup"
+    );
+    let current = orchestrator
+        .get_sandbox(&id)
+        .await?
+        .expect("legacy row preserved");
+    assert_eq!(serde_json::to_value(current).unwrap(), before);
+    assert!(Arc::ptr_eq(
+        orchestrator.sandboxes.read().await.get(&id).unwrap(),
+        &original_handle
+    ));
+    Ok(())
+}
+
+struct ExactAllocationRecordingFactory {
+    inner: MockBackendFactory,
+    builds: Arc<std::sync::atomic::AtomicUsize>,
+}
+impl crate::sandbox::SandboxBackendFactory for ExactAllocationRecordingFactory {
+    fn build(
+        &self,
+        spec: crate::sandbox::FreshSandboxBuildSpec,
+        config: SandboxLaunchConfig,
+    ) -> anyhow::Result<Box<dyn crate::sandbox::SandboxBackend>> {
+        self.builds.fetch_add(1, Ordering::SeqCst);
+        self.inner.build(spec, config)
+    }
+    fn build_from_snapshot(
+        &self,
+        snapshot: &RunnableSnapshot,
+        config: SandboxLaunchConfig,
+    ) -> anyhow::Result<Box<dyn crate::sandbox::SandboxBackend>> {
+        self.builds.fetch_add(1, Ordering::SeqCst);
+        self.inner.build_from_snapshot(snapshot, config)
+    }
+    fn build_from_paused_state(
+        &self,
+        id: SandboxId,
+        state: &dyn PausedSandboxState,
+        token: Option<crate::sandbox::EnvdAccessToken>,
+    ) -> anyhow::Result<Box<dyn crate::sandbox::SandboxBackend>> {
+        self.builds.fetch_add(1, Ordering::SeqCst);
+        self.inner.build_from_paused_state(id, state, token)
+    }
+    fn decode_paused_state(
+        &self,
+        root: PathBuf,
+        state: serde_json::Value,
+    ) -> anyhow::Result<Arc<dyn PausedSandboxState>> {
+        self.inner.decode_paused_state(root, state)
+    }
+}
+
+#[tokio::test]
+async fn exact_restore_allocation_rejects_existing_metadata_before_build() -> Result<()> {
+    setup();
+    let behavior = Arc::new(MockBehavior::new());
+    let builds = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let orchestrator = make_orchestrator_without_background_with_factory(
+        InMemoryMetadataStore::new(),
+        ExactAllocationRecordingFactory {
+            inner: MockBackendFactory::with_behavior(behavior.clone()),
+            builds: builds.clone(),
+        },
+    );
+    let existing = SandboxMetadata {
+        state: SandboxState::Paused,
+        ..Default::default()
+    };
+    let id = existing.id;
+    let before = serde_json::to_value(&existing).unwrap();
+    orchestrator.store.add(existing).await?;
+    let mut plan = create_launch_plan_with_resources(id);
+    if let LaunchPlan::Create(ref mut create) = plan {
+        create.metadata.operation_incarnation = Some(Uuid::new_v4());
+    }
+    assert!(orchestrator.launch_sandbox(plan).await.is_err());
+    assert_eq!(builds.load(Ordering::SeqCst), 0);
+    assert_eq!(behavior.stop_calls(), 0);
+    assert!(orchestrator.sandboxes.read().await.is_empty());
+    assert_eq!(
+        serde_json::to_value(orchestrator.get_sandbox(&id).await?.unwrap()).unwrap(),
+        before
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn exact_restore_allocation_keeps_incarnation_when_running() -> Result<()> {
+    setup();
+    let orchestrator = make_orchestrator_without_background_with_factory(
+        InMemoryMetadataStore::new(),
+        MockBackendFactory::new(),
+    );
+    let id = SandboxId::new();
+    let incarnation = Uuid::new_v4();
+    let mut plan = create_launch_plan_with_resources(id);
+    if let LaunchPlan::Create(ref mut create) = plan {
+        create.metadata.operation_incarnation = Some(incarnation);
+    }
+    let result = orchestrator.launch_sandbox(plan).await?;
+    assert_eq!(result.id, id);
+    assert_eq!(result.state, SandboxState::Running);
+    assert_eq!(result.operation_incarnation, Some(incarnation));
+    let stored = orchestrator.get_sandbox(&id).await?.unwrap();
+    assert_eq!(
+        serde_json::to_value(stored).unwrap(),
+        serde_json::to_value(result).unwrap()
+    );
+    Ok(())
+}

@@ -308,3 +308,52 @@ Methods:
 - ReportSandboxEvent
 - GetNode
 - UnregisterNode
+
+### Async restore operation routing
+
+`gateway.operation_pin_lookup_url` optionally names the app's authenticated
+`GET /api/runtime-operation-pins/lookup` callback. Leave it unset until the app's
+Postgres pin migration, claim participant, and async transport are deployed.
+The URL is operator configuration; a request cannot override it. Redirects from
+the callback and runtime node are refused.
+
+`POST /sandbox-operations/select` selects a candidate and reads that node's
+`GET /sandbox-operations/capabilities`. It performs no runtime creation. The node
+must report protocol `agentenv-async-restore-v1` and its exact node identity and
+process incarnation. An unsupported node cannot advertise an async allocation.
+
+`GET /sandbox-operations/{operationKey}` requires the fleet API key plus the
+app-issued `X-Agentenv-Operation-Pin-Proof` and saved
+`X-Agentenv-Operation-Request-Sha256`. The gateway reads the durable app pin and
+polls only its saved node endpoint with the captured runtime/incarnation fences.
+It never schedules, looks up a replacement node, or writes a scheduler binding.
+The proof goes only to the app callback; it is stripped before node forwarding.
+An unavailable pin or unknown receipt is not evidence that another create is
+safe. The initiating app must retain its original operation and accounting.
+
+These routes do not enable the async create worker by themselves. Creation
+negotiation must remain off until the node receipt/worker and app lifecycle
+integration pass the persistent-restart and real-Postgres release journeys.
+The existing synchronous routes and their scheduler binding TTL are unchanged.
+
+With `AENV_ASYNC_RESTORE_ENABLED=true`, the node opens its durable receipt store
+under `AENV_HOME_PATH/sandbox-operations` before serving. A storage error fails
+startup. The default is disabled. Restore requests must name an immutable
+snapshot ID and an exact node/process/runtime/incarnation allocation.
+
+Opt-in `POST /sandboxes` carries `X-Agentenv-Async-Restore:
+agentenv-async-restore-v1`, `Idempotency-Key`, the operation request hash, and the
+app's operation pin proof. The gateway reads the committed pin, compares the
+exact provider-body hash and allocation, and forwards only to the saved endpoint.
+It never schedules, follows redirects, or retries on another target. The proof
+and unrelated caller credentials are not forwarded to the node. Tenant scope
+is a separate fence, not an authentication credential.
+
+The node returns 202 after persisting the exact receipt and dispatch claim,
+before waiting for snapshot loading. The detached worker uses those exact IDs.
+Repeating the operation cannot dispatch a second worker, including after a
+process restart. Poll responses distinguish an exact currently running runtime
+from an unresolved outcome; 202, historical completion, absence, and transitional
+states are not billing-start evidence. The app must consume the result through
+its retained lifecycle continuation. This opt-in transport does not activate the
+app adapter or replace the synchronous scheduler binding path.

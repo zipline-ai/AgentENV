@@ -14,6 +14,7 @@ pub mod p2p;
 pub mod privileges;
 mod proto;
 pub mod sandbox;
+pub mod sandbox_operation;
 pub mod setup;
 pub mod snapshot;
 pub mod template;

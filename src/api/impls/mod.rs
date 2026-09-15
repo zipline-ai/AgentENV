@@ -1,4 +1,5 @@
 mod admin;
+pub(crate) mod async_restore;
 mod attached_drives;
 pub(crate) mod auth;
 mod pagination;
@@ -27,6 +28,7 @@ pub struct Claims;
 
 #[derive(Clone)]
 pub struct ApiImpl {
+    async_restore: Option<Arc<async_restore::AsyncRestoreState>>,
     orchestrator: Arc<Orchestrator>,
     snapshot_manager: Arc<SnapshotManager>,
     template_builder: Arc<TemplateBuilder>,
@@ -48,6 +50,7 @@ impl ApiImpl {
         api_key: ApiKey,
     ) -> Self {
         Self {
+            async_restore: None,
             orchestrator,
             snapshot_manager,
             template_builder,

@@ -619,66 +619,9 @@ impl Sandboxes<()> for ApiImpl {
         body: &models::NewSandbox,
     ) -> Result<SandboxesPostResponse, ()> {
         let timer = SandboxStageTimer::new("create_warm");
-        let snapshot = match timer
-            .time(
-                "load_snapshot",
-                self.snapshot_manager.load_runnable(&body.template_id),
-            )
-            .await
-        {
-            Ok(Some(snapshot)) => snapshot,
-            Ok(None) => {
-                return Ok(SandboxesPostResponse::Status400_BadRequest(Self::error(
-                    400,
-                    format!("template {} not found", body.template_id),
-                )));
-            }
-            Err(err) => {
-                warn!(error = ?err, template_id = %body.template_id, "failed to load runnable snapshot");
-                return Ok(SandboxesPostResponse::Status500_ServerError(
-                    Self::snapshot_manager_error(&err),
-                ));
-            }
-        };
-
-        let network_policy =
-            match network_policy_from_create(body.allow_internet_access, body.network.as_ref()) {
-                Ok(network) => network,
-                Err(err) => {
-                    return Ok(SandboxesPostResponse::Status400_BadRequest(Self::error(
-                        400,
-                        err.to_string(),
-                    )));
-                }
-            };
-
-        let custom_params = body
-            .custom_extension_params
-            .as_ref()
-            .map(params_model_to_map);
-        if let Err(err) = validate_custom_extension_params(custom_params.as_ref()) {
-            return Ok(SandboxesPostResponse::Status400_BadRequest(Self::error(
-                400,
-                err.to_string(),
-            )));
-        }
-
-        let request = CreateSandboxRequest {
-            source: SandboxLaunchSource::Snapshot(Box::new(snapshot)),
-            timeout: duration_from_secs(body.timeout),
-            timeout_action: match body.auto_pause {
-                Some(false) => SandboxTimeoutAction::Delete,
-                _ => SandboxTimeoutAction::Pause,
-            },
-            auto_resume: body.auto_resume.as_ref().is_some_and(|cfg| cfg.enabled),
-            user_metadata: body.metadata.clone(),
-            env_vars: body
-                .env_vars
-                .clone()
-                .filter(|env_vars| !env_vars.is_empty()),
-            network_policy,
-            secure: body.secure == Some(true),
-            custom_extension_params: custom_params,
+        let request = match self.prepare_new_sandbox(body, &timer).await {
+            Ok(request) => request,
+            Err(response) => return Ok(response),
         };
 
         match timer
@@ -1412,6 +1355,78 @@ impl Sandboxes<()> for ApiImpl {
                 x_next_token: page.next_token,
             },
         )
+    }
+}
+
+impl ApiImpl {
+    pub(super) async fn prepare_new_sandbox(
+        &self,
+        body: &models::NewSandbox,
+        timer: &SandboxStageTimer,
+    ) -> Result<CreateSandboxRequest, SandboxesPostResponse> {
+        let snapshot = match timer
+            .time(
+                "load_snapshot",
+                self.snapshot_manager.load_runnable(&body.template_id),
+            )
+            .await
+        {
+            Ok(Some(snapshot)) => snapshot,
+            Ok(None) => {
+                return Err(SandboxesPostResponse::Status400_BadRequest(Self::error(
+                    400,
+                    format!("template {} not found", body.template_id),
+                )));
+            }
+            Err(err) => {
+                warn!(error = ?err, template_id = %body.template_id, "failed to load runnable snapshot");
+                return Err(SandboxesPostResponse::Status500_ServerError(
+                    Self::snapshot_manager_error(&err),
+                ));
+            }
+        };
+
+        let network_policy =
+            match network_policy_from_create(body.allow_internet_access, body.network.as_ref()) {
+                Ok(network) => network,
+                Err(err) => {
+                    return Err(SandboxesPostResponse::Status400_BadRequest(Self::error(
+                        400,
+                        err.to_string(),
+                    )));
+                }
+            };
+
+        let custom_params = body
+            .custom_extension_params
+            .as_ref()
+            .map(params_model_to_map);
+        if let Err(err) = validate_custom_extension_params(custom_params.as_ref()) {
+            return Err(SandboxesPostResponse::Status400_BadRequest(Self::error(
+                400,
+                err.to_string(),
+            )));
+        }
+
+        let request = CreateSandboxRequest {
+            source: SandboxLaunchSource::Snapshot(Box::new(snapshot)),
+            timeout: duration_from_secs(body.timeout),
+            timeout_action: match body.auto_pause {
+                Some(false) => SandboxTimeoutAction::Delete,
+                _ => SandboxTimeoutAction::Pause,
+            },
+            auto_resume: body.auto_resume.as_ref().is_some_and(|cfg| cfg.enabled),
+            user_metadata: body.metadata.clone(),
+            env_vars: body
+                .env_vars
+                .clone()
+                .filter(|env_vars| !env_vars.is_empty()),
+            network_policy,
+            secure: body.secure == Some(true),
+            custom_extension_params: custom_params,
+        };
+
+        Ok(request)
     }
 }
 
