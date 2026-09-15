@@ -1,6 +1,7 @@
 # Process epoch wire v1
 
-Contract: zippy `42ae960e`, process-epoch contract r3. Freeze commit: pending validation.
+Contract: zippy `42ae960e`, process-epoch contract r3. Vector-content freeze commit: `eb1c0e4d1df0cf4d01218efcb6774b36bb5c3242`.
+This publication records that commit without changing its JSON bytes.
 Vendor this directory verbatim. The Go reference package is `services/processepoch`;
 the Rust reference module is `src/process_epoch/wire`. Both consume these exact
 fixtures. `schema.json` defines field order, vocabulary and structural relationships.
