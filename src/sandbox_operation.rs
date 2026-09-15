@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::local_store::{LocalKvStore, LocalStoreDurability};
+use crate::local_store::{LocalKvBatchOp, LocalKvStore, LocalStoreDurability};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OperationBinding {
@@ -44,6 +44,31 @@ impl OperationReceipts {
     /// Authority must come from authentication, never an unverified request field.
     /// The route is frozen before this call; this store never chooses another node.
     pub async fn reserve(&self, binding: OperationBinding) -> anyhow::Result<OperationReceipt> {
+        self.reserve_allocation(binding, None).await
+    }
+
+    /// Used when the controller must commit an exact Postgres pin before VM
+    /// dispatch. The node accepts the requested pair or refuses it; no fallback
+    /// allocation is permitted. Authentication and frozen-body validation happen
+    /// before this persistence primitive is called.
+    pub async fn reserve_exact(
+        &self,
+        binding: OperationBinding,
+        runtime_id: Uuid,
+        incarnation: Uuid,
+    ) -> anyhow::Result<OperationReceipt> {
+        if runtime_id.is_nil() || incarnation.is_nil() || runtime_id == incarnation {
+            bail!("invalid operation allocation");
+        }
+        self.reserve_allocation(binding, Some((runtime_id, incarnation)))
+            .await
+    }
+
+    async fn reserve_allocation(
+        &self,
+        binding: OperationBinding,
+        requested: Option<(Uuid, Uuid)>,
+    ) -> anyhow::Result<OperationReceipt> {
         let this = self.clone();
         // Retain serialization until the fsync completes even if the HTTP caller
         // drops its future. A cancelled write must not race the next reservation.
@@ -52,7 +77,10 @@ impl OperationReceipts {
             let key = receipt_key(&binding.authority, &binding.operation_key)?;
             if let Some(bytes) = this.db.get(key.clone()).await? {
                 let receipt: OperationReceipt = serde_json::from_slice(&bytes)?;
-                if receipt.binding != binding {
+                if receipt.binding != binding
+                    || requested
+                        .is_some_and(|pair| pair != (receipt.runtime_id, receipt.incarnation))
+                {
                     bail!("operation binding conflict");
                 }
                 return Ok(receipt);
@@ -66,14 +94,29 @@ impl OperationReceipts {
             {
                 bail!("invalid operation binding");
             }
+            let (runtime_id, incarnation) =
+                requested.unwrap_or_else(|| (Uuid::new_v4(), Uuid::new_v4()));
+            let allocation_key = format!("runtime:{runtime_id}").into_bytes();
+            let incarnation_key = format!("incarnation:{incarnation}").into_bytes();
+            if this.db.get(allocation_key.clone()).await?.is_some()
+                || this.db.get(incarnation_key.clone()).await?.is_some()
+            {
+                bail!("runtime allocation already reserved");
+            }
             let receipt = OperationReceipt {
                 binding,
-                runtime_id: Uuid::new_v4(),
-                incarnation: Uuid::new_v4(),
+                runtime_id,
+                incarnation,
                 dispatched: false,
                 completed: false,
             };
-            this.db.put(key, serde_json::to_vec(&receipt)?).await?;
+            this.db
+                .write_batch([
+                    LocalKvBatchOp::put(allocation_key, key.clone()),
+                    LocalKvBatchOp::put(incarnation_key, key.clone()),
+                    LocalKvBatchOp::put(key, serde_json::to_vec(&receipt)?),
+                ])
+                .await?;
             Ok(receipt)
         })
         .await

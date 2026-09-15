@@ -104,3 +104,64 @@ async fn lost_final_response_survives_restart_without_second_dispatch() -> anyho
     assert!(!restarted.claim(allocation).await?);
     Ok(())
 }
+
+#[tokio::test]
+async fn requested_allocation_cannot_move_or_be_reused_after_restart() -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let runtime = Uuid::new_v4();
+    let incarnation = Uuid::new_v4();
+    let store = OperationReceipts::open(dir.path()).await?;
+    let original = store.reserve_exact(binding(), runtime, incarnation).await?;
+    assert_eq!(original.runtime_id, runtime);
+    assert_eq!(original.incarnation, incarnation);
+    drop(store);
+    let restarted = OperationReceipts::open(dir.path()).await?;
+    assert_eq!(
+        restarted
+            .reserve_exact(binding(), runtime, incarnation)
+            .await?,
+        original
+    );
+    assert!(restarted
+        .reserve_exact(binding(), Uuid::new_v4(), incarnation)
+        .await
+        .is_err());
+    assert!(restarted
+        .reserve_exact(binding(), runtime, Uuid::new_v4())
+        .await
+        .is_err());
+    let mut other = binding();
+    other.operation_key = "restore-another-operation".into();
+    assert!(restarted
+        .reserve_exact(other.clone(), runtime, incarnation)
+        .await
+        .is_err());
+    assert_eq!(
+        restarted
+            .lookup(&other.authority, &other.operation_key)
+            .await?,
+        None
+    );
+    assert!(restarted
+        .reserve_exact(other.clone(), Uuid::new_v4(), incarnation)
+        .await
+        .is_err());
+    other.authority = "different-controller".into();
+    assert!(restarted
+        .reserve_exact(other.clone(), runtime, Uuid::new_v4())
+        .await
+        .is_err());
+    assert_eq!(
+        restarted
+            .lookup(&other.authority, &other.operation_key)
+            .await?,
+        None
+    );
+    assert_eq!(
+        restarted
+            .lookup(&binding().authority, &binding().operation_key)
+            .await?,
+        Some(original)
+    );
+    Ok(())
+}
