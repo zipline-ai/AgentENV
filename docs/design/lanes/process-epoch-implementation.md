@@ -114,3 +114,38 @@ exit 101, both regressions failed. Green: `cargo test --locked --lib process_epo
 -- --nocapture` exit 0, 20 passed. Logs: `/tmp/lanes/aenv3-c2-original-{red,green}.log`.
 Commit 2 remains incomplete until authenticated provisioning, once-only dispatch,
 response mirroring and exact recovery are connected and tested.
+
+### Exact channel primitive (dormant)
+
+The channel pins its peer certificate and host client identity, accepts only an
+HTTPS origin, and fixes the seal and exact-operation lookup paths. It disables
+redirects, proxies and transport retries. The request and response byte caps are
+256 KiB and 64 KiB; the complete request/response budget cannot exceed 30 seconds.
+Certificate inputs must come from authenticated enrollment. This primitive does
+not implement that enrollment or independently authorize an operation. It is not
+wired into a route, consumer or managed capability.
+
+Real mutual-TLS tests prove certificate denial on both sides with zero HTTP requests,
+unsafe endpoint/budget refusal, and a full POST followed by a lost response on a
+reused connection. Recovery reads the same operation on a new connection, with
+exactly one POST recorded. A separate redirect regression failed with the default
+client (it followed 307) and passes with redirects disabled. Fixture setup first
+needed explicit Rustls crypto-provider/backend selection; those setup errors are
+not counted as the behavioral reproduction.
+
+Behavioral red log: `/tmp/lanes/aenv3-c2-transport-red-configured.log` (exit 101,
+redirect assertion; two controls passed). Focused green log:
+`/tmp/lanes/aenv3-c2-transport-green.log` (exit 0, 25 process-epoch tests passed).
+This is still not the complete commit-2 dispatch participant: authenticated
+provisioning, claim-to-forward composition and response mirroring remain required.
+
+Local checkpoint validation uses `CARGO_BUILD_JOBS=1` and
+`CARGO_TARGET_DIR=/workspace/lanes/agentenv-fast-boot-f1/target`:
+
+- `cargo test --locked --lib`: exit 0, 794 passed, four existing ignored tests unchanged.
+- `cargo build --locked --lib --bin server`: exit 0.
+- `cargo clippy --locked --lib --bin server --tests -- -D warnings`: exit 0.
+- `git diff --check`: exit 0.
+
+Logs use `/tmp/lanes/aenv3-c2-original-transport-{lib-final,build,clippy}.log`.
+Fork Actions remains disabled pending the admin opt-in; this is local evidence.

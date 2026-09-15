@@ -2,6 +2,7 @@
 //! Guest-root reports are observations, never evidence of cessation or funding.
 #[cfg(test)]
 mod authentication;
+pub mod transport;
 pub mod wire;
 use crate::local_store::{LocalKvStore, LocalStoreDurability};
 use anyhow::{bail, Context};
