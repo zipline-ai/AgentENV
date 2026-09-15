@@ -1975,6 +1975,25 @@ where
         let sandbox_id = plan.sandbox_id();
         let transitional_state = plan.transitional_state();
 
+        // An async receipt supplies its exact allocation. Reserve that identity
+        // before any backend build/start, so a collision with a legacy runtime
+        // cannot overwrite its handle or enter cleanup against its metadata.
+        // Ordinary sync creation retains its existing publication order.
+        let preallocated = plan
+            .transitional_metadata()
+            .filter(|metadata| metadata.operation_incarnation.is_some());
+        if let Some(metadata) = preallocated {
+            if metadata.operation_incarnation.is_some_and(|id| id.is_nil()) {
+                return Err(OrchestratorError::InternalError(
+                    "invalid operation incarnation".into(),
+                ));
+            }
+            if self.sandboxes.read().await.contains_key(&sandbox_id) {
+                return Err(super::store::StoreError::SandboxAlreadyExists { sandbox_id }.into());
+            }
+            self.store.add(metadata.clone()).await?;
+        }
+
         // Build and start the sandbox first, before making any state changes, so that we don't
         // have to roll back any persisted state if the build fails.
         // Meanwhile, the start process can be overlapped with the initial state persistence.
@@ -2047,7 +2066,10 @@ where
             .await;
 
         // Persist the sandbox metadata if needed (during creation).
-        if let Some(metadata) = transitional_metadata.as_ref() {
+        if let Some(metadata) = transitional_metadata
+            .as_ref()
+            .filter(|_| preallocated.is_none())
+        {
             if let Err(err) = self.store.add(metadata.clone()).await {
                 warn!(error = %format_args!("{err:#}"), "failed to persist sandbox metadata; cleaning up");
                 self.cleanup_failed_launch(&plan, handle, FailedLaunchStage::Registered)

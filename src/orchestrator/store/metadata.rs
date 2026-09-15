@@ -30,6 +30,9 @@ pub enum NewTimeout {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SandboxMetadata {
     pub id: SandboxId,
+    /// Internal receipt allocation identity. Never sourced from user metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_incarnation: Option<uuid::Uuid>,
     pub snapshot_id: String,
     pub snapshot_alias: Option<String>,
     pub state: SandboxState,
@@ -68,6 +71,7 @@ impl Default for SandboxMetadata {
     fn default() -> Self {
         Self {
             id: SandboxId::new(),
+            operation_incarnation: None,
             snapshot_id: "unknown".to_string(),
             snapshot_alias: None,
             state: SandboxState::Creating,
