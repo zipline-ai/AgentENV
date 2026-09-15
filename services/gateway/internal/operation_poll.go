@@ -12,14 +12,14 @@ import (
 const (
 	headerOperationPinProof           = "X-Agentenv-Operation-Pin-Proof"
 	headerOperationHash               = "X-Agentenv-Operation-Request-Sha256"
-	headerOperationAuthority          = "X-Agentenv-Operation-Authority"
+	headerOperationTenant             = "X-Agentenv-Operation-Tenant"
 	headerOperationNodeIncarnation    = "X-Agentenv-Operation-Node-Incarnation"
 	headerOperationRuntime            = "X-Agentenv-Operation-Runtime"
 	headerOperationRuntimeIncarnation = "X-Agentenv-Operation-Runtime-Incarnation"
 )
 
 func isOperationRequest(r *http.Request) bool {
-	return r.URL.Path == "/sandbox-operations" || strings.HasPrefix(r.URL.Path, "/sandbox-operations/")
+	return isOperationDispatch(r) || r.URL.Path == "/sandbox-operations" || strings.HasPrefix(r.URL.Path, "/sandbox-operations/")
 }
 
 func oneOperationHeader(r *http.Request, name string) string {
@@ -32,6 +32,10 @@ func oneOperationHeader(r *http.Request, name string) string {
 
 func (s *Server) handleOperationPoll(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
+	if isOperationDispatch(r) {
+		s.handleOperationDispatch(w, r)
+		return
+	}
 	if r.URL.Path == "/sandbox-operations/select" && r.Method == http.MethodPost {
 		s.handleOperationSelection(w, r)
 		return
@@ -77,7 +81,7 @@ func (s *Server) handleOperationPoll(w http.ResponseWriter, r *http.Request) {
 	// headers never leave the gateway. The node receives only captured fences.
 	upstream.Header.Set(headerAPIKey, string(s.apiKey))
 	upstream.Header.Set(headerOperationHash, pin.RequestSHA256)
-	upstream.Header.Set(headerOperationAuthority, pin.TenantID)
+	upstream.Header.Set(headerOperationTenant, pin.TenantID)
 	upstream.Header.Set(headerOperationNodeIncarnation, pin.Allocation.NodeIncarnation)
 	upstream.Header.Set(headerOperationRuntime, pin.Allocation.RuntimeID)
 	upstream.Header.Set(headerOperationRuntimeIncarnation, pin.Allocation.RuntimeIncarnation)

@@ -335,3 +335,25 @@ These routes do not enable the async create worker by themselves. Creation
 negotiation must remain off until the node receipt/worker and app lifecycle
 integration pass the persistent-restart and real-Postgres release journeys.
 The existing synchronous routes and their scheduler binding TTL are unchanged.
+
+With `AENV_ASYNC_RESTORE_ENABLED=true`, the node opens its durable receipt store
+under `AENV_HOME_PATH/sandbox-operations` before serving. A storage error fails
+startup. The default is disabled. Restore requests must name an immutable
+snapshot ID and an exact node/process/runtime/incarnation allocation.
+
+Opt-in `POST /sandboxes` carries `X-Agentenv-Async-Restore:
+agentenv-async-restore-v1`, `Idempotency-Key`, the operation request hash, and the
+app's operation pin proof. The gateway reads the committed pin, compares the
+exact provider-body hash and allocation, and forwards only to the saved endpoint.
+It never schedules, follows redirects, or retries on another target. The proof
+and unrelated caller credentials are not forwarded to the node. Tenant scope
+is a separate fence, not an authentication credential.
+
+The node returns 202 after persisting the exact receipt and dispatch claim,
+before waiting for snapshot loading. The detached worker uses those exact IDs.
+Repeating the operation cannot dispatch a second worker, including after a
+process restart. Poll responses distinguish an exact currently running runtime
+from an unresolved outcome; 202, historical completion, absence, and transitional
+states are not billing-start evidence. The app must consume the result through
+its retained lifecycle continuation. This opt-in transport does not activate the
+app adapter or replace the synchronous scheduler binding path.

@@ -26,7 +26,7 @@ func TestOperationPollUsesOnlyDurablePinAndStripsProof(t *testing.T) {
 			defer foreign.Close()
 			node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				nodeCalls.Add(1)
-				if r.Method != "GET" || r.URL.RequestURI() != "/sandbox-operations/"+pin.OperationKey || r.Header.Get(headerAPIKey) != "fleet-key" || r.Header.Get(headerOperationHash) != pin.RequestSHA256 || r.Header.Get(headerOperationAuthority) != pin.TenantID || r.Header.Get(headerOperationNodeIncarnation) != pin.Allocation.NodeIncarnation || r.Header.Get(headerOperationRuntime) != pin.Allocation.RuntimeID || r.Header.Get(headerOperationRuntimeIncarnation) != pin.Allocation.RuntimeIncarnation {
+				if r.Method != "GET" || r.URL.RequestURI() != "/sandbox-operations/"+pin.OperationKey || r.Header.Get(headerAPIKey) != "fleet-key" || r.Header.Get(headerOperationHash) != pin.RequestSHA256 || r.Header.Get(headerOperationTenant) != pin.TenantID || r.Header.Get(headerOperationNodeIncarnation) != pin.Allocation.NodeIncarnation || r.Header.Get(headerOperationRuntime) != pin.Allocation.RuntimeID || r.Header.Get(headerOperationRuntimeIncarnation) != pin.Allocation.RuntimeIncarnation {
 					t.Error("wrong exact poll target or captured fence")
 				}
 				if r.Header.Get(headerOperationPinProof) != "" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
