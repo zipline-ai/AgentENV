@@ -76,6 +76,8 @@ pub(crate) fn regctl_path(deps_path: &Path) -> PathBuf {
 
 #[derive(Debug, Clone, Config)]
 pub struct AppConfig {
+    #[config(default = false, env = "AENV_ASYNC_RESTORE_ENABLED")]
+    pub async_restore_enabled: bool,
     #[config(
         env = "AENV_HOME_PATH",
         parse_env = parse_required_path,

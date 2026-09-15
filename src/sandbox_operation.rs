@@ -13,8 +13,10 @@ use crate::local_store::{LocalKvBatchOp, LocalKvStore, LocalStoreDurability};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OperationBinding {
     pub authority: String,
+    pub tenant_id: String,
     pub operation_key: String,
     pub request_sha256: String,
+    pub provider_body_sha256: String,
     pub saved_route: String,
 }
 
@@ -64,6 +66,46 @@ impl OperationReceipts {
             .await
     }
 
+    /// Persist acceptance and the once-only claim before launching the worker.
+    /// Dropping the HTTP future cannot interrupt that continuation. A restart
+    /// never replays a claimed worker, even if no completion was recorded.
+    pub async fn submit_exact<F, Fut>(
+        &self,
+        binding: OperationBinding,
+        runtime_id: Uuid,
+        incarnation: Uuid,
+        worker: F,
+    ) -> anyhow::Result<OperationReceipt>
+    where
+        F: FnOnce(OperationReceipt) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = anyhow::Result<()>> + Send + 'static,
+    {
+        let this = self.clone();
+        tokio::spawn(async move {
+            let receipt = this.reserve_exact(binding, runtime_id, incarnation).await?;
+            if this.claim(receipt.clone()).await? {
+                let captured = receipt.clone();
+                let worker_store = this.clone();
+                tokio::spawn(async move {
+                    if worker(captured.clone()).await.is_err() {
+                        tracing::warn!(operation_key = %captured.binding.operation_key, "restore worker outcome unresolved");
+                        return;
+                    }
+                    // Worker success must mean the exact requested allocation
+                    // was confirmed. This remains historical evidence only.
+                    if worker_store.complete(captured.clone()).await.is_err() {
+                        tracing::warn!(operation_key = %captured.binding.operation_key, "restore completion persistence unresolved");
+                    }
+                });
+            }
+            this.lookup(&receipt.binding.authority, &receipt.binding.operation_key)
+                .await?
+                .context("accepted operation receipt missing")
+        })
+        .await
+        .context("join operation acceptance")?
+    }
+
     async fn reserve_allocation(
         &self,
         binding: OperationBinding,
@@ -86,11 +128,15 @@ impl OperationReceipts {
                 return Ok(receipt);
             }
             if binding.saved_route.is_empty()
+                || binding.tenant_id.is_empty()
+                || binding.tenant_id.len() > 256
                 || binding.request_sha256.len() != 64
+                || binding.provider_body_sha256.len() != 64
                 || !binding
                     .request_sha256
                     .bytes()
-                    .all(|c| c.is_ascii_hexdigit())
+                    .chain(binding.provider_body_sha256.bytes())
+                    .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
             {
                 bail!("invalid operation binding");
             }

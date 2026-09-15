@@ -334,7 +334,30 @@ where
         let sandbox_id = SandboxId::new();
         let this = Arc::clone(self);
         self.run_cancellation_safe("create", sandbox_id, async move {
-            this.create_sandbox_inner(sandbox_id, request).await
+            this.create_sandbox_inner(sandbox_id, request, None).await
+        })
+        .await
+    }
+
+    pub(crate) async fn create_sandbox_allocated(
+        self: &Arc<Self>,
+        request: CreateSandboxRequest,
+        sandbox_id: SandboxId,
+        incarnation: uuid::Uuid,
+    ) -> Result<SandboxMetadata> {
+        if sandbox_id.into_inner().is_nil()
+            || incarnation.is_nil()
+            || sandbox_id.into_inner() == incarnation
+            || !matches!(&request.source, SandboxLaunchSource::Snapshot(_))
+        {
+            return Err(OrchestratorError::InternalError(
+                "invalid restore allocation".into(),
+            ));
+        }
+        let this = Arc::clone(self);
+        self.run_cancellation_safe("create", sandbox_id, async move {
+            this.create_sandbox_inner(sandbox_id, request, Some(incarnation))
+                .await
         })
         .await
     }
@@ -348,6 +371,7 @@ where
         self: Arc<Self>,
         sandbox_id: SandboxId,
         request: CreateSandboxRequest,
+        operation_incarnation: Option<uuid::Uuid>,
     ) -> Result<SandboxMetadata> {
         if let Err(err) = self.ensure_accepting_lifecycle_operations() {
             self.counters.record_create_fail(1);
@@ -405,6 +429,7 @@ where
 
                 let transitional_metadata = SandboxMetadata {
                     id: sandbox_id,
+                    operation_incarnation,
                     snapshot_id: record.id.to_string(),
                     snapshot_alias: record.alias.as_ref().map(ToString::to_string),
                     virtualization_mode: committed.virtualization_mode,
@@ -466,6 +491,7 @@ where
 
                 let transitional_metadata = SandboxMetadata {
                     id: sandbox_id,
+                    operation_incarnation,
                     snapshot_id: image_ref,
                     snapshot_alias: None,
                     virtualization_mode: ConfigManager::global_config().virtualization_mode,
@@ -2547,6 +2573,21 @@ where
         metadata.auto_resume = auto_resume_enabled;
         self.store.update(metadata).await?;
 
+        Ok(())
+    }
+
+    pub(crate) async fn set_operation_incarnation_for_test(
+        &self,
+        sandbox_id: SandboxId,
+        incarnation: Option<uuid::Uuid>,
+    ) -> Result<()> {
+        let mut metadata = self
+            .store
+            .get(&sandbox_id)
+            .await?
+            .ok_or(OrchestratorError::SandboxNotFound(sandbox_id))?;
+        metadata.operation_incarnation = incarnation;
+        self.store.update(metadata).await?;
         Ok(())
     }
 
