@@ -19,3 +19,5 @@ pub mod snapshot;
 pub mod template;
 pub mod types;
 pub mod virtualization;
+
+pub mod process_epoch;
