@@ -141,7 +141,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		s.handleProxy(w, r)
 	})
-	return s.instrumentGatewayHTTP(s.authenticate(core))
+	return s.instrumentGatewayHTTP(refuseDormantProcessEpoch(s.authenticate(core)))
 }
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, value any) {

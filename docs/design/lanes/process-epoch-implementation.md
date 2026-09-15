@@ -76,3 +76,25 @@ forwarding, host cessation, root/process/PTY tests and lifecycle composition are
 still pending. Receipt references are untrusted data, not host-stop proof objects.
 The accepted commit-1 ledger and its eleven tests are unchanged. No capability,
 consumer, route or image behavior is activated.
+
+## Commit 2 checkpoint — not ready for its gate
+
+The reserved epoch namespace now refuses before generic gateway authentication/
+routing and before node proxy classification. The red gateway test recorded
+Schedule/LookupNode calls; the red node test entered auto-resume on a paused fixture.
+Both focused regressions pass after the refusal guards.
+
+The candidate pin verifier currently compiles only in tests. It proves signatures
+and exact captured coordinates against test host pins, including correctly re-signed
+foreign bodies and stale envelope authority. It does not implement authenticated
+provisioning or a production authority factory. Do not use it as that proof.
+
+`begin_close` atomically records a new operation, closes admission and saves its
+sorted exact inventory/digest. A sixteen-way close race has one winner. Replay after
+restart preserves the original inventory and never grants forwarding again. These
+records acknowledge closing intent only; they provide no drain or cessation evidence.
+
+Still required for commit 2: authenticated provisioning/response chain, durable
+original request and once-only exact transport, saved-operation recovery, refusal/
+transport barriers and the final validation run. No managed capability, lifecycle
+bind/release or terminal/input consumer is enabled by this checkpoint.

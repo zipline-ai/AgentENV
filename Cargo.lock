@@ -137,6 +137,7 @@ dependencies = [
  "opendal",
  "openssl-sys",
  "overlaybd",
+ "percent-encoding",
  "prost",
  "prost-types",
  "rand 0.10.1",

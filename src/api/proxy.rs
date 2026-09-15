@@ -2969,4 +2969,63 @@ mod tests {
             Some(b"upstream denied websocket".as_slice())
         );
     }
+    #[tokio::test]
+    async fn dormant_process_epoch_routes_never_enter_paused_proxy_resume() {
+        let sandbox_id = SandboxId::new();
+        let app = proxy_app_for_sandbox_with_state_and_auto_resume(
+            &sandbox_id,
+            crate::orchestrator::SandboxState::Paused,
+            true,
+        )
+        .await;
+        for prefix in ["", "/proxy"] {
+            for suffix in [
+                "process-epochs/seal",
+                "process-epochs/bind",
+                "process-epoch-operations/operation-a",
+                "process%2depochs/seal",
+            ] {
+                let uri = format!("{prefix}/sandboxes/{sandbox_id}/{suffix}");
+                let response = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::POST)
+                            .uri(&uri)
+                            .header(SANDBOX_ID_HEADER, sandbox_id.to_string())
+                            .header(TARGET_PORT_HEADER, "49983")
+                            .header("x-api-key", TEST_API_KEY)
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let status = response.status();
+                let body = response.into_body().collect().await.unwrap().to_bytes();
+                assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{uri}: {body:?}");
+                assert_eq!(
+                    body,
+                    Bytes::from_static(b"managed process epochs unavailable")
+                );
+            }
+        }
+        // This positive control proves the same paused fixture would attempt resume
+        // if a reserved route fell through the legacy proxy classifier.
+        let control = app
+            .oneshot(
+                Request::builder()
+                    .uri("/proxy/health")
+                    .header(SANDBOX_ID_HEADER, sandbox_id.to_string())
+                    .header(TARGET_PORT_HEADER, "49983")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(control.status(), StatusCode::BAD_GATEWAY);
+        assert_eq!(
+            control.into_body().collect().await.unwrap().to_bytes(),
+            Bytes::from_static(b"sandbox auto-resume failed")
+        );
+    }
 }

@@ -42,6 +42,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 [dependencies]
 ring = "0.17.14"
+percent-encoding = "2.3"
 firecracker_client = { version = "1.15.1", path = "thirdparty/firecracker-client" }
 envd = { version = "0.1.0", path = "thirdparty/envd" }
 custom_extension_client = { version = "0.1.0", path = "src/custom_extension_api/generated" }

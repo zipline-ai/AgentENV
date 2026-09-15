@@ -357,3 +357,77 @@ async fn directory_confirmation_blocks_ack_and_cannot_open_admission() -> anyhow
     assert!(ledger.claim(op).await?);
     Ok(())
 }
+
+#[tokio::test]
+async fn closing_claim_blocks_new_operations_before_any_forward() -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let a = allocation();
+    let ledger = HostLedger::initialize(dir.path().join("ledger"), a.clone()).await?;
+    let prior = operation(a.clone());
+    assert!(ledger.claim(prior.clone()).await?);
+    let mut close = prior.clone();
+    close.operation_id = Uuid::new_v4();
+    close.request_sha256 = "b".repeat(64);
+    assert!(ledger.begin_close(close.clone()).await?);
+    assert_eq!(ledger.enrollment().await?.admission, Admission::Closed);
+    assert!(!ledger.begin_close(close.clone()).await?);
+    let before = ledger.db.entries().await?;
+    let mut late = prior.clone();
+    late.operation_id = Uuid::new_v4();
+    assert!(ledger.claim(late).await.is_err());
+    let mut different_close = close.clone();
+    different_close.operation_id = Uuid::new_v4();
+    assert!(ledger.begin_close(different_close).await.is_err());
+    assert_eq!(before, ledger.db.entries().await?);
+    assert_eq!(ledger.lookup(&prior).await?.unwrap().evidence_class, None);
+    assert_eq!(ledger.lookup(&close).await?.unwrap().evidence_class, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn competing_close_claims_freeze_one_inventory_and_restart_never_resends(
+) -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("ledger");
+    let a = allocation();
+    let ledger = HostLedger::initialize(path.clone(), a.clone()).await?;
+    let first = operation(a.clone());
+    assert!(ledger.claim(first.clone()).await?);
+    let mut jobs = Vec::new();
+    for _ in 0..16 {
+        let l = ledger.clone();
+        let mut o = first.clone();
+        o.operation_id = Uuid::new_v4();
+        jobs.push(tokio::spawn(
+            async move { (o.clone(), l.begin_close(o).await) },
+        ));
+    }
+    let mut winner = None;
+    for job in jobs {
+        let (op, result) = job.await?;
+        if result.is_ok_and(|fresh| fresh) {
+            assert!(winner.replace(op).is_none());
+        }
+    }
+    let winner = winner.context("one close winner")?;
+    let raw = ledger.db.get(b"closing_intent".to_vec()).await?.unwrap();
+    let intent: ClosingIntent = serde_json::from_slice(&raw)?;
+    assert_eq!(intent.operation, winner);
+    assert_eq!(intent.inventory.len(), 2);
+    assert!(intent.inventory.contains(&first));
+    assert!(intent.inventory.contains(&winner));
+    use sha2::{Digest, Sha256};
+    assert_eq!(
+        intent.inventory_sha256,
+        format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&intent.inventory)?)
+        )
+    );
+    drop(ledger);
+    let ledger = HostLedger::reopen(path, a).await?;
+    assert!(!ledger.begin_close(winner).await?);
+    assert_eq!(ledger.db.get(b"closing_intent".to_vec()).await?, Some(raw));
+    assert!(ledger.enrollment().await?.closed);
+    Ok(())
+}

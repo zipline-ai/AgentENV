@@ -1,5 +1,7 @@
 //! Dormant host-side process operation records. No route or capability uses this module.
 //! Guest-root reports are observations, never evidence of cessation or funding.
+#[cfg(test)]
+mod authentication;
 pub mod wire;
 use crate::local_store::{LocalKvStore, LocalStoreDurability};
 use anyhow::{bail, Context};
@@ -68,6 +70,15 @@ pub struct Enrollment {
     pub epoch_id: Option<Uuid>,
     // A restart cannot erase an already committed close.
     pub closed: bool,
+}
+
+// Internal closing intent. Neither the inventory nor its hash proves cessation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ClosingIntent {
+    operation: Operation,
+    inventory: Vec<Operation>,
+    inventory_sha256: String,
 }
 
 #[derive(Clone)]
@@ -297,6 +308,75 @@ impl HostLedger {
         })
         .await
         .context("join process operation claim")?
+    }
+    /// Claim a cooperative close and close admission in the same durable batch.
+    /// This acknowledges only intent. No guest I/O or cessation evidence occurs here.
+    pub async fn begin_close(&self, operation: Operation) -> anyhow::Result<bool> {
+        self.validate(&operation)?;
+        let this = self.clone();
+        tokio::spawn(async move {
+            let _guard = this.serial.lock().await;
+            let key = operation_key(operation.operation_id);
+            if let Some(raw) = this.db.get(key.clone()).await? {
+                let saved: Receipt = serde_json::from_slice(&raw)?;
+                if saved.operation != operation {
+                    bail!("process operation conflict");
+                }
+                return Ok(false);
+            }
+            let mut state = this.enrollment().await?;
+            if state.admission != Admission::Open
+                || state.closed
+                || !state.directory_confirmed
+                || state
+                    .epoch_id
+                    .is_some_and(|saved| saved != operation.epoch_id)
+            {
+                bail!("process enrollment unavailable");
+            }
+            let mut inventory = Vec::new();
+            for (key, raw) in this.db.entries().await? {
+                if key.starts_with(b"operation/") {
+                    let saved: Receipt = serde_json::from_slice(&raw)?;
+                    this.validate(&saved.operation)?;
+                    if saved.operation.epoch_id == operation.epoch_id {
+                        inventory.push(saved.operation);
+                    }
+                }
+            }
+            inventory.push(operation.clone());
+            inventory.sort_by_key(|item| item.operation_id);
+            use sha2::{Digest, Sha256};
+            let inventory_sha256 = format!("{:x}", Sha256::digest(serde_json::to_vec(&inventory)?));
+            let intent = ClosingIntent {
+                operation: operation.clone(),
+                inventory,
+                inventory_sha256,
+            };
+            state.epoch_id = Some(operation.epoch_id);
+            state.admission = Admission::Closed;
+            state.closed = true;
+            let receipt = Receipt {
+                operation,
+                evidence_class: None,
+            };
+            this.db
+                .write_batch([
+                    crate::local_store::LocalKvBatchOp::put(key, serde_json::to_vec(&receipt)?),
+                    crate::local_store::LocalKvBatchOp::put(
+                        b"enrollment".to_vec(),
+                        serde_json::to_vec(&state)?,
+                    ),
+                    crate::local_store::LocalKvBatchOp::put(
+                        b"closing_intent".to_vec(),
+                        serde_json::to_vec(&intent)?,
+                    ),
+                ])
+                .await?;
+            Ok(true)
+        })
+        .await
+        .context("join process close claim")?
     }
     pub async fn lookup(&self, operation: &Operation) -> anyhow::Result<Option<Receipt>> {
         self.validate(operation)?;
