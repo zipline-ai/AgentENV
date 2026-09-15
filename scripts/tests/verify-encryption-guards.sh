@@ -3,7 +3,7 @@
 # scripts/encryption-guards.txt is listed by the envelope test module and
 # the whole module passes. Mirrors scripts/guarded-tests in zippy.
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 guards=scripts/encryption-guards.txt
 module="snapshot::envelope::tests"
