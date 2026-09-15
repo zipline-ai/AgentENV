@@ -308,3 +308,30 @@ Methods:
 - ReportSandboxEvent
 - GetNode
 - UnregisterNode
+
+### Async restore operation routing
+
+`gateway.operation_pin_lookup_url` optionally names the app's authenticated
+`GET /api/runtime-operation-pins/lookup` callback. Leave it unset until the app's
+Postgres pin migration, claim participant, and async transport are deployed.
+The URL is operator configuration; a request cannot override it. Redirects from
+the callback and runtime node are refused.
+
+`POST /sandbox-operations/select` selects a candidate and reads that node's
+`GET /sandbox-operations/capabilities`. It performs no runtime creation. The node
+must report protocol `agentenv-async-restore-v1` and its exact node identity and
+process incarnation. An unsupported node cannot advertise an async allocation.
+
+`GET /sandbox-operations/{operationKey}` requires the fleet API key plus the
+app-issued `X-Agentenv-Operation-Pin-Proof` and saved
+`X-Agentenv-Operation-Request-Sha256`. The gateway reads the durable app pin and
+polls only its saved node endpoint with the captured runtime/incarnation fences.
+It never schedules, looks up a replacement node, or writes a scheduler binding.
+The proof goes only to the app callback; it is stripped before node forwarding.
+An unavailable pin or unknown receipt is not evidence that another create is
+safe. The initiating app must retain its original operation and accounting.
+
+These routes do not enable the async create worker by themselves. Creation
+negotiation must remain off until the node receipt/worker and app lifecycle
+integration pass the persistent-restart and real-Postgres release journeys.
+The existing synchronous routes and their scheduler binding TTL are unchanged.

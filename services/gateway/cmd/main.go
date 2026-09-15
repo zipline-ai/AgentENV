@@ -141,6 +141,7 @@ func main() {
 	}
 
 	s, err := gateway.NewServer(logger, schedulerClient, gateway.ServerOptions{
+		OperationPinLookupURL:    cfg.Gateway.OperationPinLookupURL,
 		RequestTimeout:           cfg.Gateway.RequestTimeout,
 		MaxResponseSize:          cfg.Gateway.ForwardResponseSize,
 		APIKey:                   apiKey,

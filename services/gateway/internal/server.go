@@ -45,6 +45,7 @@ const (
 )
 
 type ServerOptions struct {
+	OperationPinLookupURL    string
 	APIKey                   string
 	RequestTimeout           time.Duration
 	MaxResponseSize          int64
@@ -54,6 +55,7 @@ type ServerOptions struct {
 }
 
 type Server struct {
+	operationPins      *operationPinClient
 	logger             *zap.Logger
 	scheduler          schedulerv1.SchedulerClient
 	queryOnlyScheduler schedulerv1.SchedulerClient
@@ -72,6 +74,14 @@ func NewServer(logger *zap.Logger, schedulerClient schedulerv1.SchedulerClient, 
 	if options.APIKey == "" {
 		return nil, errors.New("API key is required")
 	}
+	var operationPins *operationPinClient
+	if options.OperationPinLookupURL != "" {
+		var err error
+		operationPins, err = newOperationPinClient(options.OperationPinLookupURL)
+		if err != nil {
+			return nil, err
+		}
+	}
 	sandboxProxyDomains, err := normalizeProxyDomains(options.SandboxProxyDomains)
 	if err != nil {
 		return nil, err
@@ -83,6 +93,7 @@ func NewServer(logger *zap.Logger, schedulerClient schedulerv1.SchedulerClient, 
 	}
 
 	return &Server{
+		operationPins:       operationPins,
 		logger:              logger,
 		scheduler:           schedulerClient,
 		queryOnlyScheduler:  queryOnlyScheduler,
@@ -104,6 +115,10 @@ func (s *Server) Handler() http.Handler {
 	// decoding %2F → / and issuing 301 redirects), which breaks proxy
 	// forwarding of percent-encoded path segments such as /files/%2F.
 	core := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isOperationRequest(r) {
+			s.handleOperationPoll(w, r)
+			return
+		}
 		if isExplicitProxyPath(r.URL.Path) && !hasCompleteProxyRouteHeaders(r.Header) {
 			setGatewayRouteSource(w, routeSourceHeader)
 			if _, hasSandbox := sandboxIDFromHeaders(r.Header); !hasSandbox {
@@ -326,6 +341,9 @@ func (s *Server) proxyRequest(
 
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(req *httputil.ProxyRequest) {
+			// This bearer authorizes only the app callback. It is never a node
+			// or guest credential, including on ordinary synchronous routes.
+			req.Out.Header.Del(headerOperationPinProof)
 			req.Out.URL.Scheme = upstreamURL.Scheme
 			req.Out.URL.Host = upstreamURL.Host
 			req.Out.URL.Path = upstreamURL.Path
@@ -871,6 +889,11 @@ func isExplicitProxyPath(path string) bool {
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		dataPlane := s.isSandboxDataPlaneRequest(r)
+		// Operation routes are machine control-plane requests even if a caller
+		// supplies guest proxy headers or a sandbox hostname.
+		if isOperationRequest(r) {
+			dataPlane = false
+		}
 		if dataPlane || r.URL.Path == "/health" || r.URL.Path == "/metrics" {
 			// Sandbox-scoped ingress and envd authorization depend on runtime
 			// metadata and are enforced by the owning runtime node.
