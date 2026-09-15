@@ -30,3 +30,32 @@ still requires the admin Actions opt-in. Real patched guest and full provider te
 remain required; first-commit ledger tests do not claim those release proofs.
 
 Provider confirmed consolidated app contract r3 `42ae960e`; field 8 remains pending.
+
+## Commit 1b: reconciliation and directory publication
+
+Every reopen durably increments `recovery_revision` and sets admission to
+`unreconciled`. The saved positive `enrollment_revision` and exact allocation must
+match; callers cannot replace them on reopen. New claims require confirmed directory
+publication and reconciled Open state for the same epoch. Exact saved claim replay
+still returns false, and retained evidence stays readable. Reconciliation CASes the
+saved allocation, recovery revision and epoch; it cannot advance enrollment, change
+an existing epoch, bind/release work or reopen a closed enrollment. Those transitions
+still require the later authenticated lifecycle/provider participants.
+
+The future authenticated participant must independently prove the saved enrollment;
+reading this ledger's snapshot is not authority. A stale/corrupt/missing anchor cannot
+be reset through these primitives. Closing admission persists independently of the
+recovery state so restart cannot erase it. Close is not cessation or settlement proof.
+
+Initialization first records a pending directory-confirmation obligation, then fsyncs
+the parent directory, then durably marks confirmation before enabling initial claims.
+Failure returns an error and leaves the obligation pending. Reopen never equates an
+existing directory with confirmation; an explicit successful retry is required and
+still does not reconcile/open admission. Missing recovery storage remains unavailable.
+
+Tests include the reviewer reopen scenario, stale recovery/enrollment and changed-epoch
+denials with whole-ledger equality, an observed before-commit reconciliation barrier,
+concurrent reconciliation and queued claim, closure across restart, injected parent
+sync failure before/after the actual fsync, a blocked confirmation barrier and retry.
+These are storage/ordering proofs, not a simulated power cut or a real malicious-root
+process/PTY proof; field 8 remains pending.
