@@ -59,3 +59,20 @@ concurrent reconciliation and queued claim, closure across restart, injected par
 sync failure before/after the actual fsync, a blocked confirmation barrier and retry.
 These are storage/ordering proofs, not a simulated power cut or a real malicious-root
 process/PTY proof; field 8 remains pending.
+
+## Canonical wire prerequisite
+
+The v1 bundle lives in `testdata/process-epoch-vectors/v1`. It freezes descriptor,
+seal request/receipt, tagged initial/transition bind (including restore bridge), bind
+receipt, lookup, stream open/frame, guest receipt, node response and release records.
+The signed envelope has independent domain, recipient/enrollment, saved request hash,
+body hash, nonce, trust revision and expiry. The README defines exact signing bytes.
+Go and Rust use the same 14 signed fixtures and 16 negative byte fixtures. Both also
+reject changed owner/adoption against the unchanged signed envelope. The generated
+records come from the committed schema; regeneration is deterministic.
+
+This is a wire prerequisite only. Authenticated saved-authority routing, once-only
+forwarding, host cessation, root/process/PTY tests and lifecycle composition are
+still pending. Receipt references are untrusted data, not host-stop proof objects.
+The accepted commit-1 ledger and its eleven tests are unchanged. No capability,
+consumer, route or image behavior is activated.

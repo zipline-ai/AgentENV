@@ -1,5 +1,6 @@
 //! Dormant host-side process operation records. No route or capability uses this module.
 //! Guest-root reports are observations, never evidence of cessation or funding.
+pub mod wire;
 use crate::local_store::{LocalKvStore, LocalStoreDurability};
 use anyhow::{bail, Context};
 use serde::{Deserialize, Serialize};

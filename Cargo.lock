@@ -141,6 +141,7 @@ dependencies = [
  "prost-types",
  "rand 0.10.1",
  "reqwest 0.13.3",
+ "ring",
  "rocksdb",
  "rtnetlink",
  "semver",

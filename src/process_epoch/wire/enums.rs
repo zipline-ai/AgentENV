@@ -1,0 +1,43 @@
+pub fn enum_values(kind: &str) -> Option<&'static [&'static str]> {
+    match kind {
+        "protocol" => Some(&["agentenv-process-epoch-v1"]),
+        "family" => Some(&["legacy", "native"]),
+        "dispatch_kind" => Some(&["create", "wake", "restore"]),
+        "initial_kind" => Some(&["initial_creation"]),
+        "transition_kind" => Some(&["epoch_transition"]),
+        "evidence" => Some(&[
+            "host_dispatch_recorded",
+            "guest_reported",
+            "host_scope_stopped",
+        ]),
+        "seal_state" => Some(&["sealed", "incomplete"]),
+        "execution_outcome" => Some(&["drained", "scope_retired", "unknown"]),
+        "bind_kind" => Some(&["initial", "transition"]),
+        "bind_state" => Some(&["bound_closed", "incomplete"]),
+        "lookup_state" => Some(&[
+            "closing",
+            "execution_claimed",
+            "effect_unknown",
+            "completed",
+            "bound_closed",
+            "incomplete",
+        ]),
+        "direction" => Some(&["stdin", "pty-input", "output-only"]),
+        "guest_class" => Some(&["guest_reported"]),
+        "guest_outcome" => Some(&["incomplete", "reported_complete"]),
+        "domain" => Some(&[
+            "agentenv-process-epoch/descriptor/v1",
+            "agentenv-process-epoch/seal/v1",
+            "agentenv-process-epoch/bind/v1",
+            "agentenv-process-epoch/lookup/v1",
+            "agentenv-process-epoch/initializer/v1",
+            "agentenv-process-epoch/mutation/v1",
+            "agentenv-process-epoch/stream-open/v1",
+            "agentenv-process-epoch/frame/v1",
+            "agentenv-process-epoch/guest-receipt/v1",
+            "agentenv-process-epoch/node-response/v1",
+            "agentenv-process-epoch/release/v1",
+        ]),
+        _ => None,
+    }
+}
