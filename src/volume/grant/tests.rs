@@ -203,3 +203,51 @@ async fn concurrent_claims_only_return_one_consumption() {
     assert_eq!(usize::from(a.is_ok()) + usize::from(z.is_ok()), 1);
     assert_eq!(c.calls.lock().unwrap().len(), 2);
 }
+
+#[tokio::test]
+async fn go_signed_vector_preserves_escaping_fractional_clock_and_payload_hash() {
+    let vector: serde_json::Value =
+        serde_json::from_str(include_str!("../testdata/grant_go_vector.json")).unwrap();
+    let (mut w, mut b, _, _) = fixture();
+    w.grant = vector["payload"].as_str().unwrap().into();
+    w.signature = vector["signature"].as_str().unwrap().into();
+    b.expected = serde_json::from_slice(&STANDARD.decode(&w.grant).unwrap()).unwrap();
+    let keys = TrustedGrantKeys::from_sec1(vec![STANDARD
+        .decode(vector["public_sec1"].as_str().unwrap())
+        .unwrap()])
+    .unwrap();
+    let verified = verify_grant(&w, &b, &keys, clock()).unwrap();
+    assert_eq!(
+        verified.payload_hash,
+        vector["payload_sha256"].as_str().unwrap()
+    );
+    let c = consumer(&w);
+    assert!(consume_verified_grant(verified, &c, clock()).await.is_ok());
+}
+#[test]
+fn exact_restore_arm_and_signed_noncanonical_denial() {
+    let (mut w, mut b, k, key) = fixture();
+    b.expected.launch_kind = "restore".into();
+    b.expected.creation_id.clear();
+    b.expected.restore_launch_id = "restore-exact".into();
+    b.expected.reserved_session_id = "session-exact".into();
+    b.expected.live_sandbox_id = "sandbox-exact".into();
+    b.expected.generation = 2;
+    b.expected.origin = GrantOrigin {
+        kind: "snapshot".into(),
+        snapshot_id: "snapshot-exact".into(),
+        snapshot_alias: "alias".into(),
+        record_digest: "c".repeat(64),
+        template_id: String::new(),
+    };
+    sign(&mut w, &b.expected, &key);
+    assert!(verify_grant(&w, &b, &k, clock()).is_ok());
+    let raw = serde_json::to_string_pretty(&b.expected).unwrap();
+    w.grant = STANDARD.encode(&raw);
+    w.signature = STANDARD.encode(
+        key.sign(&SystemRandom::new(), raw.as_bytes())
+            .unwrap()
+            .as_ref(),
+    );
+    assert!(verify_grant(&w, &b, &k, clock()).is_err());
+}

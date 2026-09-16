@@ -63,8 +63,41 @@ impl HttpGrantConsumer {
 }
 #[async_trait]
 impl GrantConsumer for HttpGrantConsumer {
-    async fn consume(&self, _request: ConsumeRequest) -> Result<ConsumeReply, GrantDenied> {
-        Err(GrantDenied)
+    async fn consume(&self, request: ConsumeRequest) -> Result<ConsumeReply, GrantDenied> {
+        if request.node_id != self.node_id
+            || request.incarnation != self.incarnation
+            || request.grant_id.trim().is_empty()
+            || request.payload_sha256.len() != 64
+            || !request
+                .payload_sha256
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err(GrantDenied);
+        }
+        let mut response = self
+            .client
+            .post(self.endpoint.clone())
+            .header(reqwest::header::AUTHORIZATION, self.token.clone())
+            .json(&request)
+            .send()
+            .await
+            .map_err(|_| GrantDenied)?;
+        if response.status() != reqwest::StatusCode::OK {
+            return Err(GrantDenied);
+        }
+        if response.content_length().is_some_and(|size| size > 8192) {
+            return Err(GrantDenied);
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(|_| GrantDenied)? {
+            if bytes.len() + chunk.len() > 8192 {
+                return Err(GrantDenied);
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        super::wire::validate_unique_json(&bytes).map_err(|_| GrantDenied)?;
+        serde_json::from_slice(&bytes).map_err(|_| GrantDenied)
     }
 }
 #[cfg(test)]

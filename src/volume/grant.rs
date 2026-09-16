@@ -92,14 +92,15 @@ pub struct VerifiedGrant {
     node_id: String,
     incarnation: String,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ConsumeRequest {
     pub grant_id: String,
     pub payload_sha256: String,
     pub node_id: String,
     pub incarnation: String,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ConsumeReply {
     pub state: String,
     pub tenant_id: String,
@@ -226,10 +227,7 @@ fn validate_payload(p: &GrantPayload, now: DateTime<Utc>) -> Result<(), GrantDen
                 && !p.origin.template_id.is_empty()
                 && p.origin.snapshot_id.is_empty()
                 && p.origin.snapshot_alias.is_empty()
-                && p.origin.record_digest.is_empty() =>
-        {
-            ()
-        }
+                && p.origin.record_digest.is_empty() => {}
         "restore"
             if p.creation_id.is_empty()
                 && !p.restore_launch_id.is_empty()
@@ -239,10 +237,7 @@ fn validate_payload(p: &GrantPayload, now: DateTime<Utc>) -> Result<(), GrantDen
                 && p.origin.kind == "snapshot"
                 && !p.origin.snapshot_id.is_empty()
                 && sha256_hex(&p.origin.record_digest)
-                && p.origin.template_id.is_empty() =>
-        {
-            ()
-        }
+                && p.origin.template_id.is_empty() => {}
         _ => return Err(GrantDenied),
     }
     Ok(())

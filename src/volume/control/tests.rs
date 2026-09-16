@@ -4,9 +4,13 @@ use axum::{
     routing::post,
     Router,
 };
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex,
+};
 struct Recording {
     calls: Mutex<Vec<(String, serde_json::Value)>>,
+    redirects: AtomicUsize,
     status: u16,
     body: String,
 }
@@ -40,11 +44,16 @@ async fn setup(
 ) {
     let recording = Arc::new(Recording {
         calls: Mutex::new(vec![]),
+        redirects: AtomicUsize::new(0),
         status,
         body: body.into(),
     });
     let app = Router::new()
         .route("/api/internal/launch-grants/consume", post(handle))
+        .fallback(|State(s): State<Arc<Recording>>| async move {
+            s.redirects.fetch_add(1, Ordering::SeqCst);
+            "redirect followed"
+        })
         .with_state(recording.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}/", listener.local_addr().unwrap());
@@ -99,11 +108,13 @@ async fn consume_redirect_server_error_and_malformed_reply_do_not_retry() {
         let (c, r, t) = setup(status, body).await;
         assert_eq!(c.consume(request()).await, Err(GrantDenied));
         assert_eq!(r.calls.lock().unwrap().len(), 1);
+        assert_eq!(r.redirects.load(Ordering::SeqCst), 0);
         t.abort();
     }
     let (c, r, t) = setup(200, &"x".repeat(8193)).await;
     assert_eq!(c.consume(request()).await, Err(GrantDenied));
     assert_eq!(r.calls.lock().unwrap().len(), 1);
+    assert_eq!(r.redirects.load(Ordering::SeqCst), 0);
     t.abort();
 }
 #[tokio::test]
@@ -130,4 +141,33 @@ fn consume_configuration_requires_tls_identity_and_secret_safe_endpoint() {
         assert!(HttpGrantConsumer::new(base, "node".into(), "boot".into(), "token").is_err());
     }
     assert!(HttpGrantConsumer::new("https://app/", "node".into(), "boot".into(), "token").is_ok());
+}
+
+#[tokio::test]
+async fn lost_consume_response_is_not_redispatched() {
+    use tokio::io::AsyncReadExt;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}/", listener.local_addr().unwrap());
+    let calls = Arc::new(AtomicUsize::new(0));
+    let seen = calls.clone();
+    let (stop, mut stopped) = tokio::sync::oneshot::channel::<()>();
+    let server = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                result=listener.accept()=>{let(mut stream,_)=result.unwrap();let mut bytes=[0;4096];let n=stream.read(&mut bytes).await.unwrap();assert!(n>0);seen.fetch_add(1,Ordering::SeqCst);drop(stream);}
+                _=&mut stopped=>break,
+            }
+        }
+    });
+    let c = HttpGrantConsumer::build(
+        base.parse().unwrap(),
+        "node".into(),
+        "boot".into(),
+        "test-token",
+    )
+    .unwrap();
+    assert_eq!(c.consume(request()).await, Err(GrantDenied));
+    stop.send(()).unwrap();
+    server.await.unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
