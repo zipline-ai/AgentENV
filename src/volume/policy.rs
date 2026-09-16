@@ -70,12 +70,34 @@ pub trait LaunchPolicy: Send + Sync {
 /// Does not consume a grant, unwrap keys or authorize any launch effect.
 /// None is missing configuration, never an instruction to use legacy mode.
 pub async fn authorize_launch_policy(
-    _policy: Option<&dyn LaunchPolicy>,
-    _observed: &PolicyObservation,
-    _payload: PayloadPresence,
+    policy: Option<&dyn LaunchPolicy>,
+    observed: &PolicyObservation,
+    payload: PayloadPresence,
 ) -> Result<EncryptionRequirement, PolicyDenied> {
-    // Red-first reproduction: the unsafe optional-payload legacy default.
-    Ok(EncryptionRequirement::Legacy)
+    if observed.dispatch_id.trim().is_empty()
+        || observed.node_id.trim().is_empty()
+        || observed.incarnation.trim().is_empty()
+        || payload == PayloadPresence::Invalid
+    {
+        return Err(PolicyDenied);
+    }
+    let facts = policy.ok_or(PolicyDenied)?.lookup(observed).await?;
+    if facts.observation != *observed
+        || facts.tenant_id.trim().is_empty()
+        || facts.owner_id.trim().is_empty()
+        || !facts.admission_allowed
+        || facts.key_policy == KeyPolicy::Unavailable
+        || facts.retained_history == RetainedHistory::Unknown
+    {
+        return Err(PolicyDenied);
+    }
+    let required = facts.key_policy == KeyPolicy::Active
+        || facts.retained_history == RetainedHistory::Encrypted;
+    match payload {
+        PayloadPresence::Absent if !required => Ok(EncryptionRequirement::Legacy),
+        PayloadPresence::Present => Ok(EncryptionRequirement::Required),
+        _ => Err(PolicyDenied),
+    }
 }
 
 #[cfg(test)]
