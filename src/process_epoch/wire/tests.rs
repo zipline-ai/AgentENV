@@ -430,3 +430,197 @@ fn addendum_two_evidence_needs_node_trust_and_exact_retirement() {
         assert_eq!(e.body_sha256, e.request_sha256);
     }
 }
+
+#[test]
+fn addendum_three_records_are_canonical() {
+    for name in fixture("addendum-3-manifest.json")["positive"]
+        .as_array()
+        .unwrap()
+    {
+        let v = fixture(name.as_str().unwrap());
+        decode_canonical(
+            v["kind"].as_str().unwrap(),
+            &unhex(v["canonical_hex"].as_str().unwrap()),
+        )
+        .unwrap();
+    }
+}
+
+#[test]
+fn addendum_three_vectors_and_ed25519_match_go() {
+    let manifest = fixture("addendum-3-manifest.json");
+    for name in manifest["positive"].as_array().unwrap() {
+        let v = fixture(name.as_str().unwrap());
+        let body = unhex(v["canonical_hex"].as_str().unwrap());
+        decode_canonical(v["kind"].as_str().unwrap(), &body).unwrap();
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&body)),
+            v["sha256"].as_str().unwrap()
+        );
+        let envelope = unhex(v["envelope_hex"].as_str().unwrap());
+        let input = signature_input(&envelope).unwrap();
+        assert_eq!(input, unhex(v["signature_input_hex"].as_str().unwrap()));
+        let key = unhex(v["public_key_hex"].as_str().unwrap());
+        let signature = unhex(v["signature_hex"].as_str().unwrap());
+        verify_signature(&envelope, &key, &signature).unwrap();
+        let e: SignedEnvelope = serde_json::from_slice(&envelope).unwrap();
+        verify_record(
+            v["kind"].as_str().unwrap(),
+            &e.domain,
+            &body,
+            &envelope,
+            &key,
+            &signature,
+        )
+        .unwrap();
+        assert!(verify_record(
+            v["kind"].as_str().unwrap(),
+            "wrong-domain",
+            &body,
+            &envelope,
+            &key,
+            &signature
+        )
+        .is_err());
+        let pair = ring::signature::Ed25519KeyPair::from_seed_unchecked(&unhex(
+            manifest["test_only_ed25519_seed_hex"].as_str().unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(pair.sign(&input).as_ref(), signature);
+        let mut changed: SignedEnvelope = serde_json::from_slice(&envelope).unwrap();
+        changed.domain = if changed.domain.ends_with("/lookup/v1") {
+            "agentenv-process-epoch/seal/v1"
+        } else {
+            "agentenv-process-epoch/lookup/v1"
+        }
+        .into();
+        assert!(
+            verify_signature(&serde_json::to_vec(&changed).unwrap(), &key, &signature).is_err()
+        );
+        changed = serde_json::from_slice(&envelope).unwrap();
+        changed.enrollment_revision += 1;
+        assert!(
+            verify_signature(&serde_json::to_vec(&changed).unwrap(), &key, &signature).is_err()
+        );
+        let mut bad_signature = signature.clone();
+        bad_signature[0] ^= 1;
+        assert!(verify_signature(&envelope, &key, &bad_signature).is_err());
+    }
+}
+#[test]
+fn addendum_three_negative_vectors_are_never_repaired() {
+    for v in fixture("negative-addendum-3.json").as_array().unwrap() {
+        assert!(
+            decode_canonical(
+                v["kind"].as_str().unwrap(),
+                &unhex(v["canonical_hex"].as_str().unwrap())
+            )
+            .is_err(),
+            "{}",
+            v["name"]
+        );
+    }
+}
+
+// Wire controls do not establish independent host cessation.
+
+// Fixture comparisons are not live lifecycle authorization or host cessation proof.
+#[test]
+fn addendum_three_response_mapping() {
+    for ctx in fixture("addendum-3-manifest.json")["contexts"]
+        .as_array()
+        .unwrap()
+    {
+        let v = fixture(ctx["name"].as_str().unwrap());
+        let source = fixture(ctx["source"].as_str().unwrap());
+        let raw = unhex(v["canonical_hex"].as_str().unwrap());
+        let response: ReceiptResponse = serde_json::from_slice(&raw).unwrap();
+        let result: Value = serde_json::from_slice(&response.node.body).unwrap();
+        let fresh: Value = serde_json::from_slice(&response.node.envelope).unwrap();
+        let key = unhex(source["public_key_hex"].as_str().unwrap());
+        let mut accepted = response.guest.is_none()
+            && decode_canonical("ReceiptResponse", &raw).is_ok()
+            && verify_record(
+                "LookupResponse",
+                "agentenv-process-epoch/node-response/v1",
+                &response.node.body,
+                &response.node.envelope,
+                &key,
+                &response.node.signature,
+            )
+            .is_ok()
+            && result["binding"] == ctx["binding"]
+            && result["request_sha256"] == ctx["request_sha256"]
+            && result["state"] == ctx["state"]
+            && result["receipt_kind"] == ctx["receipt_kind"]
+            && fresh["nonce"] == ctx["nonce"]
+            && fresh["request_sha256"] == ctx["request_sha256"];
+        if let Some(r) = response.receipt {
+            let kind = if ctx["receipt_kind"] == "dispatch_result" {
+                "DispatchResult"
+            } else {
+                "HostCessationEvidence"
+            };
+            let original: Value = serde_json::from_slice(&r.body).unwrap();
+            let historical: Value = serde_json::from_slice(&r.envelope).unwrap();
+            let (id, request) = if kind == "DispatchResult" {
+                ("operation_id", "dispatch_request_sha256")
+            } else {
+                ("retirement_operation_id", "retirement_request_sha256")
+            };
+            accepted &= verify_record(
+                kind,
+                "agentenv-process-epoch/node-response/v1",
+                &r.body,
+                &r.envelope,
+                &key,
+                &r.signature,
+            )
+            .is_ok()
+                && result["receipt_id"] == original[id]
+                && original[id] == ctx["binding"]["operation_id"]
+                && original[request] == ctx["request_sha256"]
+                && result["receipt_sha256"]
+                    == format!("{:x}", Sha256::digest(serde_json::to_vec(&r).unwrap()))
+                && historical["request_sha256"] == format!("{:x}", Sha256::digest(&r.body))
+                && historical["body_sha256"] == historical["request_sha256"]
+                && historical["nonce"] != fresh["nonce"]
+                && r.body == unhex(source["canonical_hex"].as_str().unwrap())
+                && r.envelope == unhex(source["envelope_hex"].as_str().unwrap())
+                && r.signature == unhex(source["signature_hex"].as_str().unwrap());
+            for field in [
+                "node_id",
+                "node_incarnation",
+                "enrollment_revision",
+                "audience",
+                "runtime_id",
+                "runtime_incarnation",
+            ] {
+                accepted &= fresh[field] == historical[field];
+            }
+            for field in ["runtime_id", "runtime_incarnation"] {
+                accepted &= original[field] == ctx["binding"][field];
+            }
+            if kind == "DispatchResult" {
+                for field in [
+                    "node_id",
+                    "node_incarnation",
+                    "guest_boot_id",
+                    "process_endpoint",
+                    "guest_build_sha256",
+                    "enrollment_revision",
+                ] {
+                    accepted &= original[field] == ctx["binding"][field];
+                }
+            }
+        } else {
+            accepted = false;
+        }
+        assert_eq!(
+            accepted,
+            ctx["accepted"].as_bool().unwrap(),
+            "{}",
+            ctx["name"]
+        );
+    }
+}

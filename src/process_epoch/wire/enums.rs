@@ -28,6 +28,8 @@ pub fn enum_values(kind: &str) -> Option<&'static [&'static str]> {
             "release_pending",
             "released",
             "unknown",
+            "dispatch_completed",
+            "retired",
         ]),
         "direction" => Some(&["stdin", "pty-input", "output-only"]),
         "guest_class" => Some(&["guest_reported"]),
@@ -47,7 +49,13 @@ pub fn enum_values(kind: &str) -> Option<&'static [&'static str]> {
             "agentenv-process-epoch/retire/v1",
         ]),
         "release_outcome" => Some(&["accepted", "incomplete", "released"]),
-        "receipt_kind" => Some(&["seal", "bind", "release"]),
+        "receipt_kind" => Some(&[
+            "seal",
+            "bind",
+            "release",
+            "dispatch_result",
+            "host_cessation",
+        ]),
         "result_dispatch_kind" => Some(&["create", "restore"]),
         "dispatch_outcome" => Some(&["running", "failed", "unknown"]),
         "retirement_reason" => Some(&[

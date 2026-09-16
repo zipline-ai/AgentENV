@@ -54,7 +54,9 @@
       "bound",
       "release_pending",
       "released",
-      "unknown"
+      "unknown",
+      "dispatch_completed",
+      "retired"
     ],
     "direction": [
       "stdin",
@@ -90,7 +92,9 @@
     "receipt_kind": [
       "seal",
       "bind",
-      "release"
+      "release",
+      "dispatch_result",
+      "host_cessation"
     ],
     "result_dispatch_kind": [
       "create",
@@ -1571,6 +1575,60 @@
         "value": [
           "receipt_kind",
           "release"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "dispatch_completed"
+        ],
+        "present": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "dispatch_completed"
+        ],
+        "value": [
+          "receipt_kind",
+          "dispatch_result"
+        ]
+      },
+      {
+        "when": [
+          "receipt_kind",
+          "dispatch_result"
+        ],
+        "value": [
+          "state",
+          "dispatch_completed"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "retired"
+        ],
+        "present": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "retired"
+        ],
+        "value": [
+          "receipt_kind",
+          "host_cessation"
+        ]
+      },
+      {
+        "when": [
+          "receipt_kind",
+          "host_cessation"
+        ],
+        "value": [
+          "state",
+          "retired"
         ]
       }
     ],

@@ -10,7 +10,7 @@ the Rust reference module is `src/process_epoch/wire`. Both consume these exact
 fixtures. `schema.json` defines field order, vocabulary and structural relationships.
 Run `python3 scripts/generate-process-epoch-wire.py` to reproduce the typed records
 and Go schema copy. Do not regenerate or edit an original frozen v1 fixture in place. The authorized
-addenda extend schema/types and add fixtures; run all three manifests.
+addenda extend schema/types and add fixtures; run all four manifests.
 
 Each positive JSON file contains the exact body bytes as lowercase hexadecimal,
 SHA-256, canonical envelope bytes, signature-input bytes, public key and Ed25519
@@ -69,3 +69,11 @@ their original rule.
 
 Addendum-2 content freeze: `cfc0f89e4f3667790c2a6fd69ba4dd9eb113249e`. This publication only records
 the content commit; it does not alter the vectors.
+
+The authenticated response mapping is [ADDENDUM-3.md](ADDENDUM-3.md).
+`addendum-3-manifest.json` freezes 14 positive lookup/container vectors, four
+malformed records and 12 contextual negatives. Dispatch create/restore include
+running, failed and unknown results; the retirement arm references the original
+whole-domain authority. The receipt reference hashes the complete SignedRecord;
+SavedDispatchProof retains the addendum-2 envelope digest. Earlier vectors are
+unchanged. These are wire tests, not provider execution or field-8 evidence.
