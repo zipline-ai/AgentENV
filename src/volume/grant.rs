@@ -121,20 +121,161 @@ impl ConsumedGrantEvidence {
 }
 
 pub fn verify_grant(
-    _wire: &UntrustedVolumeEncryption,
-    _binding: &AuthenticatedGrantBinding,
-    _keys: &TrustedGrantKeys,
-    _now: DateTime<Utc>,
+    wire: &UntrustedVolumeEncryption,
+    binding: &AuthenticatedGrantBinding,
+    keys: &TrustedGrantKeys,
+    now: DateTime<Utc>,
 ) -> Result<VerifiedGrant, GrantDenied> {
-    Err(GrantDenied)
+    let raw = decode_base64(&wire.grant).map_err(|_| GrantDenied)?;
+    let sig = decode_base64(&wire.signature).map_err(|_| GrantDenied)?;
+    if raw.len() > 64 * 1024 || sig.len() > 80 {
+        return Err(GrantDenied);
+    }
+    if !keys.keys.iter().any(|key| {
+        UnparsedPublicKey::new(&ECDSA_P256_SHA256_ASN1, key)
+            .verify(&raw, &sig)
+            .is_ok()
+    }) {
+        return Err(GrantDenied);
+    }
+    validate_unique_json(&raw).map_err(|_| GrantDenied)?;
+    let payload: GrantPayload = serde_json::from_slice(&raw).map_err(|_| GrantDenied)?;
+    // Match Go encoding/json's HTML and line-separator escaping without ever
+    // replacing the original bytes used for signature or payload hash checks.
+    let canonical = serde_json::to_string(&payload)
+        .map_err(|_| GrantDenied)?
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026")
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029");
+    if canonical.as_bytes() != raw
+        || payload != binding.expected
+        || payload.destination_node_id != binding.node_id
+        || binding.incarnation.trim().is_empty()
+    {
+        return Err(GrantDenied);
+    }
+    validate_payload(&payload, now)?;
+    let wrapped = decode_base64(&wire.wrapped_dek).map_err(|_| GrantDenied)?;
+    if wire.volume_id != payload.volume_id
+        || wire.volume_kind != payload.volume_kind
+        || wire.drive_id.as_deref().unwrap_or("") != payload.drive_id
+        || wire.kms_key != payload.kms_key
+        || wire.kms_key_version != payload.kms_key_version
+        || wire.kms_aad != payload.kms_aad
+        || wire.cipher != "aes-xts-plain64"
+        || wire.sector_size != 4096
+        || hex::encode(Sha256::digest(wrapped)) != payload.wrapped_dek_sha256
+    {
+        return Err(GrantDenied);
+    }
+    Ok(VerifiedGrant {
+        payload,
+        payload_hash: hex::encode(Sha256::digest(raw)),
+        node_id: binding.node_id.clone(),
+        incarnation: binding.incarnation.clone(),
+    })
+}
+fn validate_payload(p: &GrantPayload, now: DateTime<Utc>) -> Result<(), GrantDenied> {
+    let issued = DateTime::parse_from_rfc3339(&p.issued_at).map_err(|_| GrantDenied)?;
+    let expires = DateTime::parse_from_rfc3339(&p.expires_at).map_err(|_| GrantDenied)?;
+    if p.v != 6
+        || p.sandbox_family != "legacy"
+        || p.mode != "required"
+        || issued > now
+        || expires <= now
+        || expires <= issued
+        || expires.signed_duration_since(issued) > chrono::Duration::minutes(15)
+    {
+        return Err(GrantDenied);
+    }
+    for field in [
+        &p.grant_id,
+        &p.tenant_id,
+        &p.owner_user_id,
+        &p.volume_id,
+        &p.template_lineage_root,
+        &p.destination_node_id,
+        &p.kms_key,
+        &p.kms_key_version,
+    ] {
+        if field.trim().is_empty() || field.len() > 2048 || field.chars().any(char::is_control) {
+            return Err(GrantDenied);
+        }
+    }
+    if !sha256_hex(&p.request_sha256)
+        || !sha256_hex(&p.wrapped_dek_sha256)
+        || p.kms_aad != format!("vol:{}:{}:{}", p.tenant_id, p.volume_id, p.volume_kind)
+    {
+        return Err(GrantDenied);
+    }
+    match p.volume_kind.as_str() {
+        "sandbox_rootfs" if p.drive_id.is_empty() => (),
+        // Attached writable drives remain unavailable until their own binding exists.
+        _ => return Err(GrantDenied),
+    }
+    match p.launch_kind.as_str() {
+        "create"
+            if !p.creation_id.is_empty()
+                && p.restore_launch_id.is_empty()
+                && p.reserved_session_id.is_empty()
+                && p.live_sandbox_id.is_empty()
+                && p.generation == 0
+                && p.origin.kind == "template"
+                && !p.origin.template_id.is_empty()
+                && p.origin.snapshot_id.is_empty()
+                && p.origin.snapshot_alias.is_empty()
+                && p.origin.record_digest.is_empty() =>
+        {
+            ()
+        }
+        "restore"
+            if p.creation_id.is_empty()
+                && !p.restore_launch_id.is_empty()
+                && !p.reserved_session_id.is_empty()
+                && !p.live_sandbox_id.is_empty()
+                && p.generation > 0
+                && p.origin.kind == "snapshot"
+                && !p.origin.snapshot_id.is_empty()
+                && sha256_hex(&p.origin.record_digest)
+                && p.origin.template_id.is_empty() =>
+        {
+            ()
+        }
+        _ => return Err(GrantDenied),
+    }
+    Ok(())
+}
+fn sha256_hex(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 pub async fn consume_verified_grant(
-    _grant: VerifiedGrant,
-    _consumer: &dyn GrantConsumer,
-    _now: DateTime<Utc>,
+    grant: VerifiedGrant,
+    consumer: &dyn GrantConsumer,
+    now: DateTime<Utc>,
 ) -> Result<ConsumedGrantEvidence, GrantDenied> {
-    Err(GrantDenied)
+    validate_payload(&grant.payload, now)?;
+    let reply = consumer
+        .consume(ConsumeRequest {
+            grant_id: grant.payload.grant_id.clone(),
+            payload_sha256: grant.payload_hash.clone(),
+            node_id: grant.node_id.clone(),
+            incarnation: grant.incarnation.clone(),
+        })
+        .await?;
+    if reply.state != "consumed"
+        || reply.tenant_id != grant.payload.tenant_id
+        || reply.volume_id != grant.payload.volume_id
+    {
+        return Err(GrantDenied);
+    }
+    // No retry here, including ambiguous errors. Recovery uses the saved exact
+    // operation through a separate authority path; this evidence cannot mount.
+    Ok(ConsumedGrantEvidence { grant })
 }
-
 #[cfg(test)]
 mod tests;
