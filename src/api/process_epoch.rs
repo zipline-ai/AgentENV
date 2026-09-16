@@ -33,10 +33,107 @@ fn reserved_path(path: &str) -> bool {
     while parts.peek() == Some(&"proxy") {
         parts.next();
     }
-    parts.next() == Some("sandboxes")
-        && parts.next().is_some()
-        && matches!(
-            parts.next(),
-            Some("process-epochs" | "process-epoch-operations")
-        )
+    // Host/header routing uses the bare guest namespace, without sandboxes/{id}.
+    match parts.next() {
+        Some("process-epochs" | "process-epoch-operations") => true,
+        Some("sandboxes") => {
+            parts.next().is_some()
+                && matches!(
+                    parts.next(),
+                    Some("process-epochs" | "process-epoch-operations")
+                )
+        }
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{body::Body, middleware, Router};
+    use http_body_util::BodyExt;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn bare_epoch_routing_matrix_never_enters_downstream() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let recorded = calls.clone();
+        let app = Router::new()
+            .fallback(move || {
+                let recorded = recorded.clone();
+                async move {
+                    recorded.fetch_add(1, Ordering::SeqCst);
+                    "ordinary guest path"
+                }
+            })
+            .layer(middleware::from_fn(refuse_dormant));
+        for path in [
+            "/process-epochs/seal",
+            "/process-epoch-operations/operation-a",
+            "/process-epochs/unsupported",
+            "/process-epochs",
+            "/process-epoch-operations",
+            "/process%2depochs/seal",
+            "/process%252depoch-operations/operation-a",
+            "/process-epochs%2fseal",
+        ] {
+            for route in [
+                "plain",
+                "host",
+                "headers",
+                "proxy",
+                "encoded-proxy",
+                "nested-proxy",
+                "sandbox-path",
+            ] {
+                let uri = match route {
+                    "proxy" => format!("/proxy{path}"),
+                    "encoded-proxy" => format!("/proxy%2f{}", path.trim_start_matches('/')),
+                    "nested-proxy" => format!("/proxy/proxy{path}"),
+                    "sandbox-path" => format!("/sandboxes/runtime-a{path}"),
+                    _ => path.to_string(),
+                };
+                let mut req = Request::builder().method("POST").uri(&uri);
+                if route == "host" {
+                    req = req.header("host", "49983-runtime-a.sandbox.example.invalid");
+                }
+                if route == "headers" {
+                    req = req
+                        .header("x-agentenv-sandbox-id", "runtime-a")
+                        .header("x-agentenv-target-port", "49983");
+                }
+                let response = app
+                    .clone()
+                    .oneshot(req.body(Body::empty()).unwrap())
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "{route} {uri}"
+                );
+                assert_eq!(
+                    response.into_body().collect().await.unwrap().to_bytes(),
+                    "managed process epochs unavailable",
+                    "{route} {uri}"
+                );
+                assert_eq!(calls.load(Ordering::SeqCst), 0, "{route} {uri}");
+            }
+        }
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
 }

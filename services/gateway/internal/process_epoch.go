@@ -30,6 +30,10 @@ func reservedProcessEpochPath(path string) bool {
 	for len(parts) > 0 && parts[0] == "proxy" {
 		parts = parts[1:]
 	}
+	// Guest paths also arrive via host/header routing or without a sandbox prefix.
+	if len(parts) > 0 && (parts[0] == "process-epochs" || parts[0] == "process-epoch-operations") {
+		return true
+	}
 	if len(parts) < 3 || parts[0] != "sandboxes" {
 		return false
 	}

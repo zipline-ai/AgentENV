@@ -231,3 +231,33 @@ On the same final code, `cargo build --locked --lib --bin server` and
 Logs: `/tmp/lanes/aenv3-c2-final-{build,clippy}-r2.log`, adjacent `.exit` files.
 `cargo fmt --all -- --check` and `git diff --check` also exited 0. Fork Actions
 remains disabled pending administrator opt-in; these results are local evidence.
+
+## Commit 2 review: reserve bare guest paths before legacy routing
+
+The gateway and node now reserve both bare guest families (`/process-epochs` and
+`/process-epoch-operations`) as well as sandbox-prefixed control paths. Proxy prefixes
+and encoded aliases are classified before authentication, scheduler lookup/assignment,
+legacy proxy forwarding or auto-resume. Unsupported paths inside either family return
+503 with the fixed `managed process epochs unavailable` response.
+
+The reviewer Go scenario was copied into a shipped test and first exited 1: plain
+routing called Schedule; host/header routing called LookupNode(runtime-a). The reviewer
+Rust scenario first exited 101: the real paused-node fixture entered auto-resume and
+returned 502. Red logs: `/tmp/lanes/aenv3-c2r2-{go,rust}-red.log`. The expanded routing
+matrices assert fixed response bodies and zero scheduler/assignment/downstream calls;
+the real-node matrix and retained paused-runtime positive control exercise the actual
+router. Existing ordinary proxy tests are unchanged. An initial matrix fixture put a
+proxy prefix inside a sandbox control path; its ordering was corrected, with encoded
+proxy coverage retained. That fixture failure is not counted as a product reproduction.
+
+This change enables no epoch route or consumer. It only closes a fallback into legacy
+routing. Final validation commands, counts and exit codes are recorded in the PR body.
+
+Final review-fix validation (all exit 0): `cargo test --locked --lib` (816 passed,
+four existing ignored), `cargo build --locked --lib --bin server`, and
+`cargo clippy --locked --lib --bin server --tests -- -D warnings`. Rust commands use
+`CARGO_BUILD_JOBS=1` and the same CARGO_TARGET_DIR documented above. From `services`,
+`go test ./gateway/... ./processepoch -count=1` and
+`go vet ./gateway/... ./processepoch` also exited 0. Formatting and diff checks passed.
+Logs: `/tmp/lanes/aenv3-c2r2-rust-final-head.log`, `-build-final-head.log`,
+`-clippy.log`, `-go-full.log`, `-go-vet.log`, each with an adjacent `.exit` file.
