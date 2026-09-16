@@ -360,6 +360,8 @@ pub struct BindReceipt {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_session_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seal_receipt_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seal_receipt_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub adoption_sha256: Option<String>,
@@ -375,6 +377,9 @@ impl Validate for BindReceipt {
         check_scalar("bind_kind", &serde_json::to_value(&self.kind)?)?;
         check_scalar("bind_state", &serde_json::to_value(&self.state)?)?;
         if let Some(value) = &self.expected_session_id {
+            check_scalar("uuid", &serde_json::to_value(value)?)?;
+        }
+        if let Some(value) = &self.seal_receipt_id {
             check_scalar("uuid", &serde_json::to_value(value)?)?;
         }
         if let Some(value) = &self.seal_receipt_sha256 {
@@ -420,6 +425,10 @@ pub struct LookupResponse {
     pub receipt_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence: Option<EvidenceReference>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affected_operations_sha256: Option<String>,
 }
 impl Validate for LookupResponse {
     fn validate(&self) -> anyhow::Result<()> {
@@ -438,6 +447,12 @@ impl Validate for LookupResponse {
         }
         if let Some(value) = &self.evidence {
             (value).validate()?;
+        }
+        if let Some(value) = &self.receipt_kind {
+            check_scalar("receipt_kind", &serde_json::to_value(value)?)?;
+        }
+        if let Some(value) = &self.affected_operations_sha256 {
+            check_scalar("hash", &serde_json::to_value(value)?)?;
         }
         super::validate_relations("LookupResponse", &serde_json::to_value(self)?)
     }
@@ -636,6 +651,66 @@ impl Validate for SignedEnvelope {
         super::validate_relations("SignedEnvelope", &serde_json::to_value(self)?)
     }
 }
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReleaseReceipt {
+    pub request: ReleaseRequest,
+    pub request_sha256: String,
+    pub receipt_id: String,
+    pub outcome: String,
+    pub node_ledger_revision: u64,
+    pub obligations_retained: bool,
+}
+impl Validate for ReleaseReceipt {
+    fn validate(&self) -> anyhow::Result<()> {
+        (self.request).validate()?;
+        check_scalar("hash", &serde_json::to_value(&self.request_sha256)?)?;
+        check_scalar("uuid", &serde_json::to_value(&self.receipt_id)?)?;
+        check_scalar("release_outcome", &serde_json::to_value(&self.outcome)?)?;
+        check_scalar(
+            "positive",
+            &serde_json::to_value(self.node_ledger_revision)?,
+        )?;
+        check_scalar("true", &serde_json::to_value(self.obligations_retained)?)?;
+        super::validate_relations("ReleaseReceipt", &serde_json::to_value(self)?)
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SignedRecord {
+    pub body: Vec<u8>,
+    pub envelope: Vec<u8>,
+    pub signature: Vec<u8>,
+}
+impl Validate for SignedRecord {
+    fn validate(&self) -> anyhow::Result<()> {
+        check_scalar("octets", &serde_json::to_value(&self.body)?)?;
+        check_scalar("octets", &serde_json::to_value(&self.envelope)?)?;
+        check_scalar("octets", &serde_json::to_value(&self.signature)?)?;
+        super::validate_relations("SignedRecord", &serde_json::to_value(self)?)
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReceiptResponse {
+    pub node: SignedRecord,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guest: Option<SignedRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<SignedRecord>,
+}
+impl Validate for ReceiptResponse {
+    fn validate(&self) -> anyhow::Result<()> {
+        (self.node).validate()?;
+        if let Some(value) = &self.guest {
+            (value).validate()?;
+        }
+        if let Some(value) = &self.receipt {
+            (value).validate()?;
+        }
+        super::validate_relations("ReceiptResponse", &serde_json::to_value(self)?)
+    }
+}
 pub fn canonical(kind: &str, bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
     match kind {
         "Descriptor" => {
@@ -735,6 +810,21 @@ pub fn canonical(kind: &str, bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
         }
         "SignedEnvelope" => {
             let v: SignedEnvelope = serde_json::from_slice(bytes)?;
+            v.validate()?;
+            Ok(serde_json::to_vec(&v)?)
+        }
+        "ReleaseReceipt" => {
+            let v: ReleaseReceipt = serde_json::from_slice(bytes)?;
+            v.validate()?;
+            Ok(serde_json::to_vec(&v)?)
+        }
+        "SignedRecord" => {
+            let v: SignedRecord = serde_json::from_slice(bytes)?;
+            v.validate()?;
+            Ok(serde_json::to_vec(&v)?)
+        }
+        "ReceiptResponse" => {
+            let v: ReceiptResponse = serde_json::from_slice(bytes)?;
             v.validate()?;
             Ok(serde_json::to_vec(&v)?)
         }

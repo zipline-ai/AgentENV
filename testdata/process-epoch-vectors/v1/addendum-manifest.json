@@ -1,0 +1,46 @@
+{
+  "contract": "42ae960e",
+  "positive": [
+    "AddendumBindReceiptInitial.json",
+    "AddendumBindReceiptRestore.json",
+    "AddendumBindReceiptIncomplete.json",
+    "AddendumReleaseReceiptAccepted.json",
+    "AddendumReleaseReceiptIncomplete.json",
+    "AddendumReleaseReceiptReleased.json",
+    "AddendumSealReceiptSyntaxOnly.json",
+    "AddendumLookupClaimed.json",
+    "AddendumResponseClaimed.json",
+    "AddendumLookupClosing.json",
+    "AddendumResponseClosing.json",
+    "AddendumLookupCompletedSeal.json",
+    "AddendumResponseCompletedSeal.json",
+    "AddendumLookupBindPending.json",
+    "AddendumResponseBindPending.json",
+    "AddendumLookupBound.json",
+    "AddendumResponseBound.json",
+    "AddendumLookupReleasePending.json",
+    "AddendumResponseReleasePending.json",
+    "AddendumLookupReleased.json",
+    "AddendumResponseReleased.json",
+    "AddendumLookupUnknown.json",
+    "AddendumResponseUnknown.json"
+  ],
+  "negative": "negative-addendum.json",
+  "containers": [
+    "AddendumResponseClaimed.json",
+    "AddendumResponseClosing.json",
+    "AddendumResponseCompletedSeal.json",
+    "AddendumResponseBindPending.json",
+    "AddendumResponseBound.json",
+    "AddendumResponseReleasePending.json",
+    "AddendumResponseReleased.json",
+    "AddendumResponseUnknown.json"
+  ],
+  "test_only_ed25519_seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "pending": [
+    "canonical_provider_creation_result_record_and_exact_result_sha256_mapping",
+    "host_retirement_authority_backing_record_and_resolver",
+    "real_host_evidence_for_bound_closed_and_scope_stopped",
+    "release_observation_storage_and_authorized_resolution_details"
+  ]
+}

@@ -21,6 +21,13 @@ pub fn enum_values(kind: &str) -> Option<&'static [&'static str]> {
             "completed",
             "bound_closed",
             "incomplete",
+            "claimed",
+            "completed_seal",
+            "bind_pending",
+            "bound",
+            "release_pending",
+            "released",
+            "unknown",
         ]),
         "direction" => Some(&["stdin", "pty-input", "output-only"]),
         "guest_class" => Some(&["guest_reported"]),
@@ -38,6 +45,8 @@ pub fn enum_values(kind: &str) -> Option<&'static [&'static str]> {
             "agentenv-process-epoch/node-response/v1",
             "agentenv-process-epoch/release/v1",
         ]),
+        "release_outcome" => Some(&["accepted", "incomplete", "released"]),
+        "receipt_kind" => Some(&["seal", "bind", "release"]),
         _ => None,
     }
 }

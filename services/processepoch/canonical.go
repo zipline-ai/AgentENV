@@ -18,6 +18,18 @@ import (
 var errInvalid = errors.New("invalid process epoch record")
 
 func checkScalar(kind string, value any) error {
+	if kind == "octets" {
+		values, ok := value.([]uint16)
+		if !ok || len(values) == 0 || len(values) > 65536 {
+			return errInvalid
+		}
+		for _, n := range values {
+			if n > 255 {
+				return errInvalid
+			}
+		}
+		return nil
+	}
 	if kind == "uint" || kind == "positive" {
 		n, ok := value.(uint64)
 		if !ok || kind == "positive" && n == 0 {
@@ -138,10 +150,13 @@ func validateRelations(kind string, record any) error {
 		if w, ok := r["when"].([]any); ok && !reflect.DeepEqual(lookupPath(v, w[0].(string)), w[1]) {
 			continue
 		}
+		if p, ok := r["when_present"].(string); ok && lookupPath(v, p) == nil {
+			continue
+		}
 		for key, rule := range r {
 			valid := false
 			switch key {
-			case "when":
+			case "when", "when_present":
 				valid = true
 			case "present":
 				valid = lookupPath(v, rule.(string)) != nil

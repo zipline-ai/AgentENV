@@ -47,7 +47,14 @@
       "effect_unknown",
       "completed",
       "bound_closed",
-      "incomplete"
+      "incomplete",
+      "claimed",
+      "completed_seal",
+      "bind_pending",
+      "bound",
+      "release_pending",
+      "released",
+      "unknown"
     ],
     "direction": [
       "stdin",
@@ -73,6 +80,16 @@
       "agentenv-process-epoch/guest-receipt/v1",
       "agentenv-process-epoch/node-response/v1",
       "agentenv-process-epoch/release/v1"
+    ],
+    "release_outcome": [
+      "accepted",
+      "incomplete",
+      "released"
+    ],
+    "receipt_kind": [
+      "seal",
+      "bind",
+      "release"
     ]
   },
   "types": {
@@ -506,6 +523,10 @@
         "type": "uuid?"
       },
       {
+        "name": "seal_receipt_id",
+        "type": "uuid?"
+      },
+      {
         "name": "seal_receipt_sha256",
         "type": "hash?"
       },
@@ -568,6 +589,14 @@
       {
         "name": "evidence",
         "type": "EvidenceReference?"
+      },
+      {
+        "name": "receipt_kind",
+        "type": "receipt_kind?"
+      },
+      {
+        "name": "affected_operations_sha256",
+        "type": "hash?"
       }
     ],
     "StreamBinding": [
@@ -802,6 +831,60 @@
       {
         "name": "body_sha256",
         "type": "hash"
+      }
+    ],
+    "ReleaseReceipt": [
+      {
+        "name": "request",
+        "type": "ReleaseRequest"
+      },
+      {
+        "name": "request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "receipt_id",
+        "type": "uuid"
+      },
+      {
+        "name": "outcome",
+        "type": "release_outcome"
+      },
+      {
+        "name": "node_ledger_revision",
+        "type": "positive"
+      },
+      {
+        "name": "obligations_retained",
+        "type": "true"
+      }
+    ],
+    "SignedRecord": [
+      {
+        "name": "body",
+        "type": "octets"
+      },
+      {
+        "name": "envelope",
+        "type": "octets"
+      },
+      {
+        "name": "signature",
+        "type": "octets"
+      }
+    ],
+    "ReceiptResponse": [
+      {
+        "name": "node",
+        "type": "SignedRecord"
+      },
+      {
+        "name": "guest",
+        "type": "SignedRecord?"
+      },
+      {
+        "name": "receipt",
+        "type": "SignedRecord?"
       }
     ]
   },
@@ -1169,6 +1252,20 @@
           "transition"
         ],
         "present": "binding.launch_id"
+      },
+      {
+        "when": [
+          "kind",
+          "transition"
+        ],
+        "present": "seal_receipt_id"
+      },
+      {
+        "when": [
+          "kind",
+          "initial"
+        ],
+        "absent": "seal_receipt_id"
       }
     ],
     "LookupResponse": [
@@ -1176,6 +1273,120 @@
         "paired": [
           "receipt_id",
           "receipt_sha256"
+        ]
+      },
+      {
+        "paired": [
+          "receipt_kind",
+          "receipt_id"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "completed_seal"
+        ],
+        "present": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "completed_seal"
+        ],
+        "value": [
+          "receipt_kind",
+          "seal"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "bound"
+        ],
+        "present": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "bound"
+        ],
+        "value": [
+          "receipt_kind",
+          "bind"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "released"
+        ],
+        "present": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "released"
+        ],
+        "value": [
+          "receipt_kind",
+          "release"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "claimed"
+        ],
+        "absent": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "closing"
+        ],
+        "absent": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "unknown"
+        ],
+        "absent": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "closing"
+        ],
+        "present": "affected_operations_sha256"
+      },
+      {
+        "when": [
+          "state",
+          "completed_seal"
+        ],
+        "present": "affected_operations_sha256"
+      },
+      {
+        "when": [
+          "state",
+          "bind_pending"
+        ],
+        "when_present": "receipt_id",
+        "value": [
+          "receipt_kind",
+          "bind"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "release_pending"
+        ],
+        "when_present": "receipt_id",
+        "value": [
+          "receipt_kind",
+          "release"
         ]
       }
     ],

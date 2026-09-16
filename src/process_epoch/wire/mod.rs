@@ -11,6 +11,18 @@ pub trait Validate {
     fn validate(&self) -> anyhow::Result<()>;
 }
 fn check_scalar(kind: &str, value: &Value) -> anyhow::Result<()> {
+    if kind == "octets" {
+        let bytes = value
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("octet array required"))?;
+        ensure!(
+            !bytes.is_empty()
+                && bytes.len() <= 65536
+                && bytes.iter().all(|b| b.as_u64().is_some_and(|n| n <= 255)),
+            "invalid octet array"
+        );
+        return Ok(());
+    }
     if kind == "uint" || kind == "positive" {
         let n = value
             .as_u64()
@@ -98,9 +110,14 @@ fn validate_relations(kind: &str, value: &Value) -> anyhow::Result<()> {
                 continue;
             }
         }
+        if let Some(p) = r["when_present"].as_str() {
+            if path(value, p).is_none() {
+                continue;
+            }
+        }
         for (key, rule) in r.as_object().unwrap() {
             let valid = match key.as_str() {
-                "when" => true,
+                "when" | "when_present" => true,
                 "equal" => {
                     let a = path(value, rule[0].as_str().unwrap());
                     a.is_some() && a == path(value, rule[1].as_str().unwrap())

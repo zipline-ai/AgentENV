@@ -119,3 +119,180 @@ fn signed_initial_owner_and_adoption_cannot_change() {
         .is_err());
     }
 }
+
+#[test]
+fn addendum_records_are_canonical() {
+    for name in fixture("addendum-manifest.json")["positive"]
+        .as_array()
+        .unwrap()
+    {
+        let v = fixture(name.as_str().unwrap());
+        decode_canonical(
+            v["kind"].as_str().unwrap(),
+            &unhex(v["canonical_hex"].as_str().unwrap()),
+        )
+        .unwrap();
+    }
+}
+
+#[test]
+fn addendum_vectors_and_ed25519_match_go() {
+    let manifest = fixture("addendum-manifest.json");
+    for name in manifest["positive"].as_array().unwrap() {
+        let v = fixture(name.as_str().unwrap());
+        let body = unhex(v["canonical_hex"].as_str().unwrap());
+        decode_canonical(v["kind"].as_str().unwrap(), &body).unwrap();
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&body)),
+            v["sha256"].as_str().unwrap()
+        );
+        let envelope = unhex(v["envelope_hex"].as_str().unwrap());
+        let input = signature_input(&envelope).unwrap();
+        assert_eq!(input, unhex(v["signature_input_hex"].as_str().unwrap()));
+        let key = unhex(v["public_key_hex"].as_str().unwrap());
+        let signature = unhex(v["signature_hex"].as_str().unwrap());
+        verify_signature(&envelope, &key, &signature).unwrap();
+        let e: SignedEnvelope = serde_json::from_slice(&envelope).unwrap();
+        verify_record(
+            v["kind"].as_str().unwrap(),
+            &e.domain,
+            &body,
+            &envelope,
+            &key,
+            &signature,
+        )
+        .unwrap();
+        assert!(verify_record(
+            v["kind"].as_str().unwrap(),
+            "wrong-domain",
+            &body,
+            &envelope,
+            &key,
+            &signature
+        )
+        .is_err());
+        let pair = ring::signature::Ed25519KeyPair::from_seed_unchecked(&unhex(
+            manifest["test_only_ed25519_seed_hex"].as_str().unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(pair.sign(&input).as_ref(), signature);
+        let mut changed: SignedEnvelope = serde_json::from_slice(&envelope).unwrap();
+        changed.domain = if changed.domain.ends_with("/lookup/v1") {
+            "agentenv-process-epoch/seal/v1"
+        } else {
+            "agentenv-process-epoch/lookup/v1"
+        }
+        .into();
+        assert!(
+            verify_signature(&serde_json::to_vec(&changed).unwrap(), &key, &signature).is_err()
+        );
+        changed = serde_json::from_slice(&envelope).unwrap();
+        changed.enrollment_revision += 1;
+        assert!(
+            verify_signature(&serde_json::to_vec(&changed).unwrap(), &key, &signature).is_err()
+        );
+        let mut bad_signature = signature.clone();
+        bad_signature[0] ^= 1;
+        assert!(verify_signature(&envelope, &key, &bad_signature).is_err());
+    }
+}
+#[test]
+fn addendum_negative_vectors_are_never_repaired() {
+    for v in fixture("negative-addendum.json").as_array().unwrap() {
+        assert!(
+            decode_canonical(
+                v["kind"].as_str().unwrap(),
+                &unhex(v["canonical_hex"].as_str().unwrap())
+            )
+            .is_err(),
+            "{}",
+            v["name"]
+        );
+    }
+}
+
+#[test]
+fn addendum_lookup_preserves_first_signed_receipt() {
+    for name in fixture("addendum-manifest.json")["containers"]
+        .as_array()
+        .unwrap()
+    {
+        let v = fixture(name.as_str().unwrap());
+        let response: ReceiptResponse =
+            serde_json::from_slice(&unhex(v["canonical_hex"].as_str().unwrap())).unwrap();
+        let result: LookupResponse = serde_json::from_slice(&response.node.body).unwrap();
+        let key = unhex(v["public_key_hex"].as_str().unwrap());
+        verify_record(
+            "LookupResponse",
+            "agentenv-process-epoch/node-response/v1",
+            &response.node.body,
+            &response.node.envelope,
+            &key,
+            &response.node.signature,
+        )
+        .unwrap();
+        if let Some(receipt) = response.receipt {
+            let kind = match result.receipt_kind.as_deref().unwrap() {
+                "seal" => "SealReceipt",
+                "bind" => "BindReceipt",
+                "release" => "ReleaseReceipt",
+                _ => panic!("kind"),
+            };
+            verify_record(
+                kind,
+                "agentenv-process-epoch/node-response/v1",
+                &receipt.body,
+                &receipt.envelope,
+                &key,
+                &receipt.signature,
+            )
+            .unwrap();
+            assert_eq!(
+                result.receipt_sha256.as_deref().unwrap(),
+                format!(
+                    "{:x}",
+                    Sha256::digest(serde_json::to_vec(&receipt).unwrap())
+                )
+            );
+            let original: Value = serde_json::from_slice(&receipt.body).unwrap();
+            assert_eq!(
+                result.receipt_id.as_deref().unwrap(),
+                original["receipt_id"].as_str().unwrap()
+            );
+            assert_eq!(
+                result.request_sha256,
+                original["request_sha256"].as_str().unwrap()
+            );
+            match result.state.as_str() {
+                "bound" => assert_eq!(original["state"], "bound_closed"),
+                "bind_pending" => assert_eq!(original["state"], "incomplete"),
+                "released" => assert_eq!(original["outcome"], "released"),
+                "release_pending" => assert!(matches!(
+                    original["outcome"].as_str(),
+                    Some("accepted" | "incomplete")
+                )),
+                "completed_seal" => {
+                    assert_eq!(original["state"], "sealed");
+                    assert_eq!(original["evidence"]["evidence_class"], "host_scope_stopped");
+                }
+                _ => panic!("unexpected receipt state"),
+            }
+            let first: SignedEnvelope = serde_json::from_slice(&receipt.envelope).unwrap();
+            let fresh: SignedEnvelope = serde_json::from_slice(&response.node.envelope).unwrap();
+            assert_ne!(first.nonce, fresh.nonce);
+            assert_eq!(first.request_sha256, fresh.request_sha256);
+            let mut altered = receipt.clone();
+            altered.signature[0] ^= 1;
+            assert_ne!(
+                result.receipt_sha256.unwrap(),
+                format!(
+                    "{:x}",
+                    Sha256::digest(serde_json::to_vec(&altered).unwrap())
+                )
+            );
+        } else {
+            assert!(result.receipt_id.is_none());
+            assert!(result.receipt_sha256.is_none());
+        }
+    }
+}

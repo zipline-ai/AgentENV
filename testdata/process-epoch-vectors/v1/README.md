@@ -1,16 +1,20 @@
 # Process epoch wire v1
 
 Contract: zippy `42ae960e`, process-epoch contract r3. Vector-content freeze commit: `eb1c0e4d1df0cf4d01218efcb6774b36bb5c3242`.
-This publication records that commit without changing its JSON bytes.
+The original body/signature fixtures remain unchanged. The receipt addendum is
+specified in [ADDENDUM.md](ADDENDUM.md), with its own `addendum-manifest.json`.
+Addendum content freeze: pending publication commit.
 Vendor this directory verbatim. The Go reference package is `services/processepoch`;
 the Rust reference module is `src/process_epoch/wire`. Both consume these exact
 fixtures. `schema.json` defines field order, vocabulary and structural relationships.
 Run `python3 scripts/generate-process-epoch-wire.py` to reproduce the typed records
-and Go schema copy. Do not regenerate or edit a frozen v1 fixture in place.
+and Go schema copy. Do not regenerate or edit an original frozen v1 fixture in place. The authorized
+addendum extends schema/types and adds fixtures; run both manifests.
 
 Each positive JSON file contains the exact body bytes as lowercase hexadecimal,
 SHA-256, canonical envelope bytes, signature-input bytes, public key and Ed25519
-signature. `manifest.json` lists every positive fixture and the negative corpus.
+signature. `manifest.json` lists the original fixtures; `addendum-manifest.json` lists the new
+receipt/container fixtures and their negative corpus.
 The published private seed is TEST ONLY. It is not an enrollment or controller key.
 
 Encoding is UTF-8 JSON with declaration order, no whitespace, omitted optional
@@ -41,7 +45,9 @@ The initial/transition tagged records reject mixed arms. Restore binds predecess
 seal to the captured LR/result and exact destination. Bind is `bound_closed` only.
 A guest report cannot encode a successful seal. `EvidenceReference` is untrusted
 reported data; its `host_scope_stopped` vocabulary does not construct host evidence.
-There is no successful host cessation fixture or live host-stop constructor here.
+The original bundle has no successful host cessation fixture. The addendum adds a
+syntax-only completed-seal fixture; it is not host evidence or a success stub. No
+live host-stop constructor is supplied by these wire records.
 
 Tests run both serializers over the same positive and negative bytes, reproduce all
 signatures, and reject changed domain, enrollment and signature. These are wire and

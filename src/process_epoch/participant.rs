@@ -548,6 +548,8 @@ impl Participant {
             node_ledger_revision: i.ledger.provider_revision().await?,
             receipt_id: None,
             receipt_sha256: None,
+            receipt_kind: None,
+            affected_operations_sha256: None,
             evidence,
         };
         let body = serde_json::to_vec(&body)?;

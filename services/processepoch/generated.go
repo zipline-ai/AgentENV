@@ -474,6 +474,7 @@ type BindReceipt struct {
 	Kind                 string            `json:"kind"`
 	State                string            `json:"state"`
 	ExpectedSessionId    *string           `json:"expected_session_id,omitempty"`
+	SealReceiptId        *string           `json:"seal_receipt_id,omitempty"`
 	SealReceiptSha256    *string           `json:"seal_receipt_sha256,omitempty"`
 	AdoptionSha256       *string           `json:"adoption_sha256,omitempty"`
 	NodeLedgerRevision   uint64            `json:"node_ledger_revision"`
@@ -499,6 +500,11 @@ func (v BindReceipt) validate() error {
 	}
 	if v.ExpectedSessionId != nil {
 		if err := checkScalar("uuid", *v.ExpectedSessionId); err != nil {
+			return err
+		}
+	}
+	if v.SealReceiptId != nil {
+		if err := checkScalar("uuid", *v.SealReceiptId); err != nil {
 			return err
 		}
 	}
@@ -544,13 +550,15 @@ func (v LookupRequest) validate() error {
 }
 
 type LookupResponse struct {
-	Binding            EpochBinding       `json:"binding"`
-	RequestSha256      string             `json:"request_sha256"`
-	State              string             `json:"state"`
-	NodeLedgerRevision uint64             `json:"node_ledger_revision"`
-	ReceiptId          *string            `json:"receipt_id,omitempty"`
-	ReceiptSha256      *string            `json:"receipt_sha256,omitempty"`
-	Evidence           *EvidenceReference `json:"evidence,omitempty"`
+	Binding                  EpochBinding       `json:"binding"`
+	RequestSha256            string             `json:"request_sha256"`
+	State                    string             `json:"state"`
+	NodeLedgerRevision       uint64             `json:"node_ledger_revision"`
+	ReceiptId                *string            `json:"receipt_id,omitempty"`
+	ReceiptSha256            *string            `json:"receipt_sha256,omitempty"`
+	Evidence                 *EvidenceReference `json:"evidence,omitempty"`
+	ReceiptKind              *string            `json:"receipt_kind,omitempty"`
+	AffectedOperationsSha256 *string            `json:"affected_operations_sha256,omitempty"`
 }
 
 func (v LookupResponse) validate() error {
@@ -578,6 +586,16 @@ func (v LookupResponse) validate() error {
 	}
 	if v.Evidence != nil {
 		if err := (*v.Evidence).validate(); err != nil {
+			return err
+		}
+	}
+	if v.ReceiptKind != nil {
+		if err := checkScalar("receipt_kind", *v.ReceiptKind); err != nil {
+			return err
+		}
+	}
+	if v.AffectedOperationsSha256 != nil {
+		if err := checkScalar("hash", *v.AffectedOperationsSha256); err != nil {
 			return err
 		}
 	}
@@ -854,6 +872,79 @@ func (v SignedEnvelope) validate() error {
 	}
 	return validateRelations("SignedEnvelope", v)
 }
+
+type ReleaseReceipt struct {
+	Request             ReleaseRequest `json:"request"`
+	RequestSha256       string         `json:"request_sha256"`
+	ReceiptId           string         `json:"receipt_id"`
+	Outcome             string         `json:"outcome"`
+	NodeLedgerRevision  uint64         `json:"node_ledger_revision"`
+	ObligationsRetained bool           `json:"obligations_retained"`
+}
+
+func (v ReleaseReceipt) validate() error {
+	if err := (v.Request).validate(); err != nil {
+		return err
+	}
+	if err := checkScalar("hash", v.RequestSha256); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.ReceiptId); err != nil {
+		return err
+	}
+	if err := checkScalar("release_outcome", v.Outcome); err != nil {
+		return err
+	}
+	if err := checkScalar("positive", v.NodeLedgerRevision); err != nil {
+		return err
+	}
+	if err := checkScalar("true", v.ObligationsRetained); err != nil {
+		return err
+	}
+	return validateRelations("ReleaseReceipt", v)
+}
+
+type SignedRecord struct {
+	Body      []uint16 `json:"body"`
+	Envelope  []uint16 `json:"envelope"`
+	Signature []uint16 `json:"signature"`
+}
+
+func (v SignedRecord) validate() error {
+	if err := checkScalar("octets", v.Body); err != nil {
+		return err
+	}
+	if err := checkScalar("octets", v.Envelope); err != nil {
+		return err
+	}
+	if err := checkScalar("octets", v.Signature); err != nil {
+		return err
+	}
+	return validateRelations("SignedRecord", v)
+}
+
+type ReceiptResponse struct {
+	Node    SignedRecord  `json:"node"`
+	Guest   *SignedRecord `json:"guest,omitempty"`
+	Receipt *SignedRecord `json:"receipt,omitempty"`
+}
+
+func (v ReceiptResponse) validate() error {
+	if err := (v.Node).validate(); err != nil {
+		return err
+	}
+	if v.Guest != nil {
+		if err := (*v.Guest).validate(); err != nil {
+			return err
+		}
+	}
+	if v.Receipt != nil {
+		if err := (*v.Receipt).validate(); err != nil {
+			return err
+		}
+	}
+	return validateRelations("ReceiptResponse", v)
+}
 func decode(kind string, data []byte) ([]byte, error) {
 	switch kind {
 	case "Descriptor":
@@ -1029,6 +1120,33 @@ func decode(kind string, data []byte) ([]byte, error) {
 		return marshal(v)
 	case "SignedEnvelope":
 		var v SignedEnvelope
+		if err := json.Unmarshal(data, &v); err != nil {
+			return nil, err
+		}
+		if err := v.validate(); err != nil {
+			return nil, err
+		}
+		return marshal(v)
+	case "ReleaseReceipt":
+		var v ReleaseReceipt
+		if err := json.Unmarshal(data, &v); err != nil {
+			return nil, err
+		}
+		if err := v.validate(); err != nil {
+			return nil, err
+		}
+		return marshal(v)
+	case "SignedRecord":
+		var v SignedRecord
+		if err := json.Unmarshal(data, &v); err != nil {
+			return nil, err
+		}
+		if err := v.validate(); err != nil {
+			return nil, err
+		}
+		return marshal(v)
+	case "ReceiptResponse":
+		var v ReceiptResponse
 		if err := json.Unmarshal(data, &v); err != nil {
 			return nil, err
 		}

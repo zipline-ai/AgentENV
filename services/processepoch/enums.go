@@ -11,9 +11,11 @@ var enumValues = map[string][]string{
 	"execution_outcome": {"drained", "scope_retired", "unknown"},
 	"bind_kind":         {"initial", "transition"},
 	"bind_state":        {"bound_closed", "incomplete"},
-	"lookup_state":      {"closing", "execution_claimed", "effect_unknown", "completed", "bound_closed", "incomplete"},
+	"lookup_state":      {"closing", "execution_claimed", "effect_unknown", "completed", "bound_closed", "incomplete", "claimed", "completed_seal", "bind_pending", "bound", "release_pending", "released", "unknown"},
 	"direction":         {"stdin", "pty-input", "output-only"},
 	"guest_class":       {"guest_reported"},
 	"guest_outcome":     {"incomplete", "reported_complete"},
 	"domain":            {"agentenv-process-epoch/descriptor/v1", "agentenv-process-epoch/seal/v1", "agentenv-process-epoch/bind/v1", "agentenv-process-epoch/lookup/v1", "agentenv-process-epoch/initializer/v1", "agentenv-process-epoch/mutation/v1", "agentenv-process-epoch/stream-open/v1", "agentenv-process-epoch/frame/v1", "agentenv-process-epoch/guest-receipt/v1", "agentenv-process-epoch/node-response/v1", "agentenv-process-epoch/release/v1"},
+	"release_outcome":   {"accepted", "incomplete", "released"},
+	"receipt_kind":      {"seal", "bind", "release"},
 }

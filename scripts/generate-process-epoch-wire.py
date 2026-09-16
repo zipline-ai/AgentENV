@@ -12,8 +12,8 @@ for name, fields in types.items():
  go+=[f'type {name} struct {{']
  for f in fields:
   n,t=f['name'],f['type']; optional=t.endswith('?'); t=t.rstrip('?')
-  rt=t if t in types else ('u64' if t in ('uint','positive') else 'bool' if t=='true' else 'String')
-  gt=t if t in types else ('uint64' if t in ('uint','positive') else 'bool' if t=='true' else 'string')
+  rt=t if t in types else ('u64' if t in ('uint','positive') else 'bool' if t=='true' else 'Vec<u8>' if t=='octets' else 'String')
+  gt=t if t in types else ('uint64' if t in ('uint','positive') else 'bool' if t=='true' else '[]uint16' if t=='octets' else 'string')
   if optional: rust+=['    #[serde(default, skip_serializing_if = "Option::is_none")]']; rt='Option<'+rt+'>'; gt='*'+gt
   rust+=[f'    pub {n}: {rt},']
   gn=''.join(p.title() for p in n.split('_'))
