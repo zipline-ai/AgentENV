@@ -66,3 +66,6 @@ Its generator is `scripts/generate-process-epoch-addendum-2.py`. All earlier fix
 bytes are unchanged. The consolidated item-4 ruling changes only the new dispatch
 result reference to its envelope digest; historical bind/release references retain
 their original rule.
+
+Addendum-2 content freeze: `cfc0f89e4f3667790c2a6fd69ba4dd9eb113249e`. This publication only records
+the content commit; it does not alter the vectors.
