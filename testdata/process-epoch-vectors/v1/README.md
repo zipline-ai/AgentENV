@@ -77,3 +77,6 @@ running, failed and unknown results; the retirement arm references the original
 whole-domain authority. The receipt reference hashes the complete SignedRecord;
 SavedDispatchProof retains the addendum-2 envelope digest. Earlier vectors are
 unchanged. These are wire tests, not provider execution or field-8 evidence.
+
+Addendum-3 content freeze: `963b0de634833b22805d18235d749d82f879dd73`.
+This publication records the content commit without changing any vector bytes.
