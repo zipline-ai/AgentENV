@@ -335,3 +335,135 @@ func TestAddendumLookupPreservesFirstSignedReceipt(t *testing.T) {
 		}
 	}
 }
+
+func TestAddendumTwoRecordsAreCanonical(t *testing.T) {
+	var manifest struct{ Positive []string }
+	readFixture(t, "addendum-2-manifest.json", &manifest)
+	for _, name := range manifest.Positive {
+		var v map[string]string
+		readFixture(t, name, &v)
+		if _, err := DecodeCanonical(v["kind"], unhex(t, v["canonical_hex"])); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestAddendumTwoVectorsAndEd25519MatchRust(t *testing.T) {
+	var manifest struct {
+		Positive []string
+		Seed     string `json:"test_only_ed25519_seed_hex"`
+	}
+	readFixture(t, "addendum-2-manifest.json", &manifest)
+	for _, name := range manifest.Positive {
+		t.Run(name, func(t *testing.T) {
+			var v map[string]string
+			readFixture(t, name, &v)
+			body := unhex(t, v["canonical_hex"])
+			if _, e := DecodeCanonical(v["kind"], body); e != nil {
+				t.Fatal(e)
+			}
+			sum := sha256.Sum256(body)
+			if hex.EncodeToString(sum[:]) != v["sha256"] {
+				t.Fatal("body hash")
+			}
+			envelope := unhex(t, v["envelope_hex"])
+			input, e := SignatureInput(envelope)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if !bytes.Equal(input, unhex(t, v["signature_input_hex"])) {
+				t.Fatal("signature bytes")
+			}
+			key, sig := unhex(t, v["public_key_hex"]), unhex(t, v["signature_hex"])
+			if e = VerifySignature(envelope, key, sig); e != nil {
+				t.Fatal(e)
+			}
+			if !bytes.Equal(ed25519.Sign(ed25519.NewKeyFromSeed(unhex(t, manifest.Seed)), input), sig) {
+				t.Fatal("signature mismatch")
+			}
+			var original SignedEnvelope
+			if e = json.Unmarshal(envelope, &original); e != nil {
+				t.Fatal(e)
+			}
+			if e = VerifyRecord(v["kind"], original.Domain, body, envelope, key, sig); e != nil {
+				t.Fatal(e)
+			}
+			if VerifyRecord(v["kind"], "wrong-domain", body, envelope, key, sig) == nil {
+				t.Fatal("wrong domain accepted")
+			}
+			var changed SignedEnvelope
+			if e = json.Unmarshal(envelope, &changed); e != nil {
+				t.Fatal(e)
+			}
+			if changed.Domain == "agentenv-process-epoch/lookup/v1" {
+				changed.Domain = "agentenv-process-epoch/seal/v1"
+			} else {
+				changed.Domain = "agentenv-process-epoch/lookup/v1"
+			}
+			b, _ := marshal(changed)
+			if VerifySignature(b, key, sig) == nil {
+				t.Fatal("wrong domain accepted")
+			}
+			if e = json.Unmarshal(envelope, &changed); e != nil {
+				t.Fatal(e)
+			}
+			changed.EnrollmentRevision++
+			b, _ = marshal(changed)
+			if VerifySignature(b, key, sig) == nil {
+				t.Fatal("wrong enrollment accepted")
+			}
+			sig[0] ^= 1
+			if VerifySignature(envelope, key, sig) == nil {
+				t.Fatal("changed signature accepted")
+			}
+		})
+	}
+}
+func TestAddendumTwoNegativeVectorsAreNeverRepaired(t *testing.T) {
+	var all []map[string]string
+	readFixture(t, "negative-addendum-2.json", &all)
+	for _, v := range all {
+		t.Run(v["name"], func(t *testing.T) {
+			if _, e := DecodeCanonical(v["kind"], unhex(t, v["canonical_hex"])); e == nil {
+				t.Fatal("accepted invalid bytes")
+			}
+		})
+	}
+}
+
+// These are wire-verifier controls, not proof that a host stopped a VM.
+func TestAddendumTwoEvidenceNeedsNodeTrustAndExactRetirement(t *testing.T) {
+	var authority map[string]string
+	readFixture(t, "Addendum2Retirement.json", &authority)
+	var a RetirementAuthority
+	if err := json.Unmarshal(unhex(t, authority["canonical_hex"]), &a); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"Addendum2HostCessation.json", "Addendum2WrongIncarnation.json", "Addendum2GuestImpostor.json"} {
+		var v map[string]string
+		readFixture(t, name, &v)
+		body := unhex(t, v["canonical_hex"])
+		err := VerifyRecord("HostCessationEvidence", "agentenv-process-epoch/node-response/v1", body, unhex(t, v["envelope_hex"]), unhex(t, v["public_key_hex"]), unhex(t, v["signature_hex"]))
+		var evidence HostCessationEvidence
+		if e := json.Unmarshal(body, &evidence); e != nil {
+			t.Fatal(e)
+		}
+		accepted := err == nil && evidence.RuntimeId == a.RuntimeId && evidence.RuntimeIncarnation == a.RuntimeIncarnation && evidence.RetirementOperationId == a.OperationId && evidence.RetirementRequestSha256 == authority["sha256"] && evidence.NoSecondCopy
+		if accepted != (name == "Addendum2HostCessation.json") {
+			t.Fatalf("%s acceptance=%v", name, accepted)
+		}
+	}
+	var manifest struct{ Positive []string }
+	readFixture(t, "addendum-2-manifest.json", &manifest)
+	for _, name := range manifest.Positive {
+		var v map[string]string
+		readFixture(t, name, &v)
+		var e SignedEnvelope
+		if err := json.Unmarshal(unhex(t, v["envelope_hex"]), &e); err != nil {
+			t.Fatal(err)
+		}
+		if e.RequestSha256 != v["sha256"] || e.BodySha256 != v["sha256"] {
+			t.Fatalf("%s: self digest not envelope-only", name)
+		}
+	}
+}

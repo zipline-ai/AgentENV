@@ -711,6 +711,143 @@ impl Validate for ReceiptResponse {
         super::validate_relations("ReceiptResponse", &serde_json::to_value(self)?)
     }
 }
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DispatchResult {
+    pub protocol: String,
+    pub dispatch_kind: String,
+    pub operation_id: String,
+    pub dispatch_request_sha256: String,
+    pub node_id: String,
+    pub node_incarnation: String,
+    pub runtime_id: String,
+    pub runtime_incarnation: String,
+    pub guest_boot_id: String,
+    pub process_endpoint: String,
+    pub guest_build_sha256: String,
+    pub enrollment_revision: u64,
+    pub node_ledger_revision: u64,
+    pub outcome: String,
+    pub node_observed_at: u64,
+}
+impl Validate for DispatchResult {
+    fn validate(&self) -> anyhow::Result<()> {
+        check_scalar("protocol", &serde_json::to_value(&self.protocol)?)?;
+        check_scalar(
+            "result_dispatch_kind",
+            &serde_json::to_value(&self.dispatch_kind)?,
+        )?;
+        check_scalar("uuid", &serde_json::to_value(&self.operation_id)?)?;
+        check_scalar(
+            "hash",
+            &serde_json::to_value(&self.dispatch_request_sha256)?,
+        )?;
+        check_scalar("text", &serde_json::to_value(&self.node_id)?)?;
+        check_scalar("uuid", &serde_json::to_value(&self.node_incarnation)?)?;
+        check_scalar("uuid", &serde_json::to_value(&self.runtime_id)?)?;
+        check_scalar("uuid", &serde_json::to_value(&self.runtime_incarnation)?)?;
+        check_scalar("uuid", &serde_json::to_value(&self.guest_boot_id)?)?;
+        check_scalar("text", &serde_json::to_value(&self.process_endpoint)?)?;
+        check_scalar("hash", &serde_json::to_value(&self.guest_build_sha256)?)?;
+        check_scalar("positive", &serde_json::to_value(self.enrollment_revision)?)?;
+        check_scalar(
+            "positive",
+            &serde_json::to_value(self.node_ledger_revision)?,
+        )?;
+        check_scalar("dispatch_outcome", &serde_json::to_value(&self.outcome)?)?;
+        check_scalar("positive", &serde_json::to_value(self.node_observed_at)?)?;
+        super::validate_relations("DispatchResult", &serde_json::to_value(self)?)
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AffectedSealReceipt {
+    pub operation_id: String,
+    pub envelope_sha256: String,
+}
+impl Validate for AffectedSealReceipt {
+    fn validate(&self) -> anyhow::Result<()> {
+        check_scalar("uuid", &serde_json::to_value(&self.operation_id)?)?;
+        check_scalar("hash", &serde_json::to_value(&self.envelope_sha256)?)?;
+        super::validate_relations("AffectedSealReceipt", &serde_json::to_value(self)?)
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RetirementAuthority {
+    pub protocol: String,
+    pub operation_id: String,
+    pub tenant_id: String,
+    pub sandbox_family: String,
+    pub sandbox_id: String,
+    pub transition_id: String,
+    pub runtime_id: String,
+    pub runtime_incarnation: String,
+    pub enrollment_revision: u64,
+    pub expected_session_id: String,
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub affected_seal_receipt: Option<AffectedSealReceipt>,
+    pub issued_at: u64,
+    pub expires_at: u64,
+}
+impl Validate for RetirementAuthority {
+    fn validate(&self) -> anyhow::Result<()> {
+        check_scalar("protocol", &serde_json::to_value(&self.protocol)?)?;
+        check_scalar("uuid", &serde_json::to_value(&self.operation_id)?)?;
+        check_scalar("text", &serde_json::to_value(&self.tenant_id)?)?;
+        check_scalar("family", &serde_json::to_value(&self.sandbox_family)?)?;
+        check_scalar("text", &serde_json::to_value(&self.sandbox_id)?)?;
+        check_scalar("uuid", &serde_json::to_value(&self.transition_id)?)?;
+        check_scalar("uuid", &serde_json::to_value(&self.runtime_id)?)?;
+        check_scalar("uuid", &serde_json::to_value(&self.runtime_incarnation)?)?;
+        check_scalar("positive", &serde_json::to_value(self.enrollment_revision)?)?;
+        check_scalar("uuid", &serde_json::to_value(&self.expected_session_id)?)?;
+        check_scalar("retirement_reason", &serde_json::to_value(&self.reason)?)?;
+        if let Some(value) = &self.affected_seal_receipt {
+            (value).validate()?;
+        }
+        check_scalar("positive", &serde_json::to_value(self.issued_at)?)?;
+        check_scalar("positive", &serde_json::to_value(self.expires_at)?)?;
+        super::validate_relations("RetirementAuthority", &serde_json::to_value(self)?)
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostCessationEvidence {
+    pub retirement_operation_id: String,
+    pub retirement_request_sha256: String,
+    pub runtime_id: String,
+    pub runtime_incarnation: String,
+    pub host_allocation_id: String,
+    pub cessation_method: String,
+    pub host_observed_at: u64,
+    pub no_second_copy: bool,
+    pub node_ledger_revision: u64,
+}
+impl Validate for HostCessationEvidence {
+    fn validate(&self) -> anyhow::Result<()> {
+        check_scalar(
+            "uuid",
+            &serde_json::to_value(&self.retirement_operation_id)?,
+        )?;
+        check_scalar(
+            "hash",
+            &serde_json::to_value(&self.retirement_request_sha256)?,
+        )?;
+        check_scalar("uuid", &serde_json::to_value(&self.runtime_id)?)?;
+        check_scalar("uuid", &serde_json::to_value(&self.runtime_incarnation)?)?;
+        check_scalar("text", &serde_json::to_value(&self.host_allocation_id)?)?;
+        check_scalar("text", &serde_json::to_value(&self.cessation_method)?)?;
+        check_scalar("positive", &serde_json::to_value(self.host_observed_at)?)?;
+        check_scalar("true", &serde_json::to_value(self.no_second_copy)?)?;
+        check_scalar(
+            "positive",
+            &serde_json::to_value(self.node_ledger_revision)?,
+        )?;
+        super::validate_relations("HostCessationEvidence", &serde_json::to_value(self)?)
+    }
+}
 pub fn canonical(kind: &str, bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
     match kind {
         "Descriptor" => {
@@ -825,6 +962,26 @@ pub fn canonical(kind: &str, bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
         }
         "ReceiptResponse" => {
             let v: ReceiptResponse = serde_json::from_slice(bytes)?;
+            v.validate()?;
+            Ok(serde_json::to_vec(&v)?)
+        }
+        "DispatchResult" => {
+            let v: DispatchResult = serde_json::from_slice(bytes)?;
+            v.validate()?;
+            Ok(serde_json::to_vec(&v)?)
+        }
+        "AffectedSealReceipt" => {
+            let v: AffectedSealReceipt = serde_json::from_slice(bytes)?;
+            v.validate()?;
+            Ok(serde_json::to_vec(&v)?)
+        }
+        "RetirementAuthority" => {
+            let v: RetirementAuthority = serde_json::from_slice(bytes)?;
+            v.validate()?;
+            Ok(serde_json::to_vec(&v)?)
+        }
+        "HostCessationEvidence" => {
+            let v: HostCessationEvidence = serde_json::from_slice(bytes)?;
             v.validate()?;
             Ok(serde_json::to_vec(&v)?)
         }

@@ -121,3 +121,9 @@ full binding and record digest together; parsing a known state string is insuffi
 6. **PENDING: lifecycle persistence/resolution of accepted/incomplete release observations**;
    their wire bytes are fixed here, not permission to discard existing obligations or
    retry. Real guest/host and PG proofs, build/image identities and rollout remain pending.
+
+## Addendum-2 resolution
+
+ADDENDUM-2.md and addendum-2-manifest.json define the canonical dispatch result and
+whole-domain retirement records under the consolidated coordinator ruling. Their
+issuer/resolver implementations and actual host evidence remain separate work.

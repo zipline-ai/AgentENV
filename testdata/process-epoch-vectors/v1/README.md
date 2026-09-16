@@ -10,7 +10,7 @@ the Rust reference module is `src/process_epoch/wire`. Both consume these exact
 fixtures. `schema.json` defines field order, vocabulary and structural relationships.
 Run `python3 scripts/generate-process-epoch-wire.py` to reproduce the typed records
 and Go schema copy. Do not regenerate or edit an original frozen v1 fixture in place. The authorized
-addendum extends schema/types and adds fixtures; run both manifests.
+addenda extend schema/types and add fixtures; run all three manifests.
 
 Each positive JSON file contains the exact body bytes as lowercase hexadecimal,
 SHA-256, canonical envelope bytes, signature-input bytes, public key and Ed25519
@@ -59,3 +59,10 @@ Commands (from fork root):
 
 - `cargo test --locked --lib process_epoch::wire`
 - `cd services && go test ./processepoch`
+
+The dispatch/retirement addendum is [ADDENDUM-2.md](ADDENDUM-2.md). Its
+`addendum-2-manifest.json` lists positive, malformed and contextual negative vectors.
+Its generator is `scripts/generate-process-epoch-addendum-2.py`. All earlier fixture
+bytes are unchanged. The consolidated item-4 ruling changes only the new dispatch
+result reference to its envelope digest; historical bind/release references retain
+their original rule.

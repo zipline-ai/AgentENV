@@ -79,7 +79,8 @@
       "agentenv-process-epoch/frame/v1",
       "agentenv-process-epoch/guest-receipt/v1",
       "agentenv-process-epoch/node-response/v1",
-      "agentenv-process-epoch/release/v1"
+      "agentenv-process-epoch/release/v1",
+      "agentenv-process-epoch/retire/v1"
     ],
     "release_outcome": [
       "accepted",
@@ -90,6 +91,21 @@
       "seal",
       "bind",
       "release"
+    ],
+    "result_dispatch_kind": [
+      "create",
+      "restore"
+    ],
+    "dispatch_outcome": [
+      "running",
+      "failed",
+      "unknown"
+    ],
+    "retirement_reason": [
+      "policy_idle",
+      "policy_exhausted",
+      "owner_delete",
+      "epoch_seal_retire"
     ]
   },
   "types": {
@@ -885,6 +901,174 @@
       {
         "name": "receipt",
         "type": "SignedRecord?"
+      }
+    ],
+    "DispatchResult": [
+      {
+        "name": "protocol",
+        "type": "protocol"
+      },
+      {
+        "name": "dispatch_kind",
+        "type": "result_dispatch_kind"
+      },
+      {
+        "name": "operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "dispatch_request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "node_id",
+        "type": "text"
+      },
+      {
+        "name": "node_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "guest_boot_id",
+        "type": "uuid"
+      },
+      {
+        "name": "process_endpoint",
+        "type": "text"
+      },
+      {
+        "name": "guest_build_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "enrollment_revision",
+        "type": "positive"
+      },
+      {
+        "name": "node_ledger_revision",
+        "type": "positive"
+      },
+      {
+        "name": "outcome",
+        "type": "dispatch_outcome"
+      },
+      {
+        "name": "node_observed_at",
+        "type": "positive"
+      }
+    ],
+    "AffectedSealReceipt": [
+      {
+        "name": "operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "envelope_sha256",
+        "type": "hash"
+      }
+    ],
+    "RetirementAuthority": [
+      {
+        "name": "protocol",
+        "type": "protocol"
+      },
+      {
+        "name": "operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "tenant_id",
+        "type": "text"
+      },
+      {
+        "name": "sandbox_family",
+        "type": "family"
+      },
+      {
+        "name": "sandbox_id",
+        "type": "text"
+      },
+      {
+        "name": "transition_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "enrollment_revision",
+        "type": "positive"
+      },
+      {
+        "name": "expected_session_id",
+        "type": "uuid"
+      },
+      {
+        "name": "reason",
+        "type": "retirement_reason"
+      },
+      {
+        "name": "affected_seal_receipt",
+        "type": "AffectedSealReceipt?"
+      },
+      {
+        "name": "issued_at",
+        "type": "positive"
+      },
+      {
+        "name": "expires_at",
+        "type": "positive"
+      }
+    ],
+    "HostCessationEvidence": [
+      {
+        "name": "retirement_operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "retirement_request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "host_allocation_id",
+        "type": "text"
+      },
+      {
+        "name": "cessation_method",
+        "type": "text"
+      },
+      {
+        "name": "host_observed_at",
+        "type": "positive"
+      },
+      {
+        "name": "no_second_copy",
+        "type": "true"
+      },
+      {
+        "name": "node_ledger_revision",
+        "type": "positive"
       }
     ]
   },

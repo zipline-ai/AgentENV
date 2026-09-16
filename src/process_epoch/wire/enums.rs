@@ -44,9 +44,18 @@ pub fn enum_values(kind: &str) -> Option<&'static [&'static str]> {
             "agentenv-process-epoch/guest-receipt/v1",
             "agentenv-process-epoch/node-response/v1",
             "agentenv-process-epoch/release/v1",
+            "agentenv-process-epoch/retire/v1",
         ]),
         "release_outcome" => Some(&["accepted", "incomplete", "released"]),
         "receipt_kind" => Some(&["seal", "bind", "release"]),
+        "result_dispatch_kind" => Some(&["create", "restore"]),
+        "dispatch_outcome" => Some(&["running", "failed", "unknown"]),
+        "retirement_reason" => Some(&[
+            "policy_idle",
+            "policy_exhausted",
+            "owner_delete",
+            "epoch_seal_retire",
+        ]),
         _ => None,
     }
 }

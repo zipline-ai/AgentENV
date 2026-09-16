@@ -261,3 +261,29 @@ four existing ignored), `cargo build --locked --lib --bin server`, and
 `go vet ./gateway/... ./processepoch` also exited 0. Formatting and diff checks passed.
 Logs: `/tmp/lanes/aenv3-c2r2-rust-final-head.log`, `-build-final-head.log`,
 `-clippy.log`, `-go-full.log`, `-go-vet.log`, each with an adjacent `.exit` file.
+
+## Addendum-2: dispatch result and whole-domain retirement
+
+The coordinator accepted both counters: RetirementAuthority includes a signed
+operation_id; DispatchResult keeps dispatch_request_sha256 for its originating
+request. All three new records put their own canonical-body digest in the envelope
+only. SavedDispatchProof.exact_result_sha256 now uses that result envelope digest.
+The new ADDENDUM-2.md records this explicit change from the earlier proposed
+container digest without changing earlier frozen receipt-reference rules.
+
+The new schema and vectors define DispatchResult, RetirementAuthority and
+HostCessationEvidence, including wrong-incarnation, missing no_second_copy and
+guest-key impostor controls. These are wire tests, not host cessation evidence.
+The exact host primitive and lifecycle issuer/resolver still need implementation;
+no guest report is promoted, and no bind/release or input consumer is activated.
+The changed schema hash must be pinned by reviewed build/enrollment policy before
+rollout; this commit does not rotate that policy.
+
+Addendum-2 validation: `cargo test --locked --lib` exited 0 (824 passed, four
+existing ignored); build and clippy with the commit-2 commands above exited 0.
+`go test ./processepoch ./gateway/... -count=1` and `go vet ./processepoch
+./gateway/...` from services exited 0. Formatting/diff checks and deterministic
+regeneration passed. Logs: `/tmp/lanes/epoch-addendum2-{red,go,rust,build,clippy,vet}.log`.
+The red Go run exited 1 against the old codec. The initial Rust run caught a new
+sandbox-ID type mismatch; the final schema retains the existing text-ID contract.
+Fork Actions remains unavailable pending administrator opt-in.

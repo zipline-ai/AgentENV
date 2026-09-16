@@ -945,6 +945,196 @@ func (v ReceiptResponse) validate() error {
 	}
 	return validateRelations("ReceiptResponse", v)
 }
+
+type DispatchResult struct {
+	Protocol              string `json:"protocol"`
+	DispatchKind          string `json:"dispatch_kind"`
+	OperationId           string `json:"operation_id"`
+	DispatchRequestSha256 string `json:"dispatch_request_sha256"`
+	NodeId                string `json:"node_id"`
+	NodeIncarnation       string `json:"node_incarnation"`
+	RuntimeId             string `json:"runtime_id"`
+	RuntimeIncarnation    string `json:"runtime_incarnation"`
+	GuestBootId           string `json:"guest_boot_id"`
+	ProcessEndpoint       string `json:"process_endpoint"`
+	GuestBuildSha256      string `json:"guest_build_sha256"`
+	EnrollmentRevision    uint64 `json:"enrollment_revision"`
+	NodeLedgerRevision    uint64 `json:"node_ledger_revision"`
+	Outcome               string `json:"outcome"`
+	NodeObservedAt        uint64 `json:"node_observed_at"`
+}
+
+func (v DispatchResult) validate() error {
+	if err := checkScalar("protocol", v.Protocol); err != nil {
+		return err
+	}
+	if err := checkScalar("result_dispatch_kind", v.DispatchKind); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.OperationId); err != nil {
+		return err
+	}
+	if err := checkScalar("hash", v.DispatchRequestSha256); err != nil {
+		return err
+	}
+	if err := checkScalar("text", v.NodeId); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.NodeIncarnation); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.RuntimeId); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.RuntimeIncarnation); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.GuestBootId); err != nil {
+		return err
+	}
+	if err := checkScalar("text", v.ProcessEndpoint); err != nil {
+		return err
+	}
+	if err := checkScalar("hash", v.GuestBuildSha256); err != nil {
+		return err
+	}
+	if err := checkScalar("positive", v.EnrollmentRevision); err != nil {
+		return err
+	}
+	if err := checkScalar("positive", v.NodeLedgerRevision); err != nil {
+		return err
+	}
+	if err := checkScalar("dispatch_outcome", v.Outcome); err != nil {
+		return err
+	}
+	if err := checkScalar("positive", v.NodeObservedAt); err != nil {
+		return err
+	}
+	return validateRelations("DispatchResult", v)
+}
+
+type AffectedSealReceipt struct {
+	OperationId    string `json:"operation_id"`
+	EnvelopeSha256 string `json:"envelope_sha256"`
+}
+
+func (v AffectedSealReceipt) validate() error {
+	if err := checkScalar("uuid", v.OperationId); err != nil {
+		return err
+	}
+	if err := checkScalar("hash", v.EnvelopeSha256); err != nil {
+		return err
+	}
+	return validateRelations("AffectedSealReceipt", v)
+}
+
+type RetirementAuthority struct {
+	Protocol            string               `json:"protocol"`
+	OperationId         string               `json:"operation_id"`
+	TenantId            string               `json:"tenant_id"`
+	SandboxFamily       string               `json:"sandbox_family"`
+	SandboxId           string               `json:"sandbox_id"`
+	TransitionId        string               `json:"transition_id"`
+	RuntimeId           string               `json:"runtime_id"`
+	RuntimeIncarnation  string               `json:"runtime_incarnation"`
+	EnrollmentRevision  uint64               `json:"enrollment_revision"`
+	ExpectedSessionId   string               `json:"expected_session_id"`
+	Reason              string               `json:"reason"`
+	AffectedSealReceipt *AffectedSealReceipt `json:"affected_seal_receipt,omitempty"`
+	IssuedAt            uint64               `json:"issued_at"`
+	ExpiresAt           uint64               `json:"expires_at"`
+}
+
+func (v RetirementAuthority) validate() error {
+	if err := checkScalar("protocol", v.Protocol); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.OperationId); err != nil {
+		return err
+	}
+	if err := checkScalar("text", v.TenantId); err != nil {
+		return err
+	}
+	if err := checkScalar("family", v.SandboxFamily); err != nil {
+		return err
+	}
+	if err := checkScalar("text", v.SandboxId); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.TransitionId); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.RuntimeId); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.RuntimeIncarnation); err != nil {
+		return err
+	}
+	if err := checkScalar("positive", v.EnrollmentRevision); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.ExpectedSessionId); err != nil {
+		return err
+	}
+	if err := checkScalar("retirement_reason", v.Reason); err != nil {
+		return err
+	}
+	if v.AffectedSealReceipt != nil {
+		if err := (*v.AffectedSealReceipt).validate(); err != nil {
+			return err
+		}
+	}
+	if err := checkScalar("positive", v.IssuedAt); err != nil {
+		return err
+	}
+	if err := checkScalar("positive", v.ExpiresAt); err != nil {
+		return err
+	}
+	return validateRelations("RetirementAuthority", v)
+}
+
+type HostCessationEvidence struct {
+	RetirementOperationId   string `json:"retirement_operation_id"`
+	RetirementRequestSha256 string `json:"retirement_request_sha256"`
+	RuntimeId               string `json:"runtime_id"`
+	RuntimeIncarnation      string `json:"runtime_incarnation"`
+	HostAllocationId        string `json:"host_allocation_id"`
+	CessationMethod         string `json:"cessation_method"`
+	HostObservedAt          uint64 `json:"host_observed_at"`
+	NoSecondCopy            bool   `json:"no_second_copy"`
+	NodeLedgerRevision      uint64 `json:"node_ledger_revision"`
+}
+
+func (v HostCessationEvidence) validate() error {
+	if err := checkScalar("uuid", v.RetirementOperationId); err != nil {
+		return err
+	}
+	if err := checkScalar("hash", v.RetirementRequestSha256); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.RuntimeId); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.RuntimeIncarnation); err != nil {
+		return err
+	}
+	if err := checkScalar("text", v.HostAllocationId); err != nil {
+		return err
+	}
+	if err := checkScalar("text", v.CessationMethod); err != nil {
+		return err
+	}
+	if err := checkScalar("positive", v.HostObservedAt); err != nil {
+		return err
+	}
+	if err := checkScalar("true", v.NoSecondCopy); err != nil {
+		return err
+	}
+	if err := checkScalar("positive", v.NodeLedgerRevision); err != nil {
+		return err
+	}
+	return validateRelations("HostCessationEvidence", v)
+}
 func decode(kind string, data []byte) ([]byte, error) {
 	switch kind {
 	case "Descriptor":
@@ -1147,6 +1337,42 @@ func decode(kind string, data []byte) ([]byte, error) {
 		return marshal(v)
 	case "ReceiptResponse":
 		var v ReceiptResponse
+		if err := json.Unmarshal(data, &v); err != nil {
+			return nil, err
+		}
+		if err := v.validate(); err != nil {
+			return nil, err
+		}
+		return marshal(v)
+	case "DispatchResult":
+		var v DispatchResult
+		if err := json.Unmarshal(data, &v); err != nil {
+			return nil, err
+		}
+		if err := v.validate(); err != nil {
+			return nil, err
+		}
+		return marshal(v)
+	case "AffectedSealReceipt":
+		var v AffectedSealReceipt
+		if err := json.Unmarshal(data, &v); err != nil {
+			return nil, err
+		}
+		if err := v.validate(); err != nil {
+			return nil, err
+		}
+		return marshal(v)
+	case "RetirementAuthority":
+		var v RetirementAuthority
+		if err := json.Unmarshal(data, &v); err != nil {
+			return nil, err
+		}
+		if err := v.validate(); err != nil {
+			return nil, err
+		}
+		return marshal(v)
+	case "HostCessationEvidence":
+		var v HostCessationEvidence
 		if err := json.Unmarshal(data, &v); err != nil {
 			return nil, err
 		}
