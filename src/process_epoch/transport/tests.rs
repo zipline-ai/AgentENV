@@ -5,11 +5,11 @@ use tokio_rustls::{rustls, TlsAcceptor};
 
 type CapturedRequest = (usize, String, Vec<u8>);
 
-struct Peer {
-    endpoint: String,
-    cert: String,
-    identity: String,
-    observed: Arc<Mutex<Vec<CapturedRequest>>>,
+pub(crate) struct Peer {
+    pub(crate) endpoint: String,
+    pub(crate) cert: String,
+    pub(crate) identity: String,
+    pub(crate) observed: Arc<Mutex<Vec<CapturedRequest>>>,
     task: tokio::task::JoinHandle<()>,
 }
 impl Drop for Peer {
@@ -17,7 +17,7 @@ impl Drop for Peer {
         self.task.abort();
     }
 }
-async fn peer(redirect: bool) -> Peer {
+pub(crate) async fn peer(redirect: bool) -> Peer {
     let server = rcgen::generate_simple_self_signed(vec!["127.0.0.1".into()]).unwrap();
     let client = rcgen::generate_simple_self_signed(vec!["host.fixture".into()]).unwrap();
     let cert = server.cert.pem();

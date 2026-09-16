@@ -1,7 +1,8 @@
 //! Dormant host-side process operation records. No route or capability uses this module.
 //! Guest-root reports are observations, never evidence of cessation or funding.
-#[cfg(test)]
 mod authentication;
+pub mod enrollment;
+pub mod participant;
 pub mod transport;
 pub mod wire;
 use crate::local_store::{LocalKvStore, LocalStoreDurability};
@@ -71,6 +72,9 @@ pub struct Enrollment {
     pub epoch_id: Option<Uuid>,
     // A restart cannot erase an already committed close.
     pub closed: bool,
+    // Missing child records cannot turn recovery into first initialization.
+    #[serde(default)]
+    pub provider_initialized: bool,
 }
 
 /// Persisted bytes are historical evidence, not fresh forwarding authority.
@@ -175,6 +179,7 @@ impl HostLedger {
             directory_confirmed: false,
             epoch_id: None,
             closed: false,
+            provider_initialized: false,
         };
         db.put(b"enrollment".to_vec(), serde_json::to_vec(&state)?)
             .await?;
@@ -380,7 +385,8 @@ impl HostLedger {
         original: OriginalCloseRequest,
     ) -> anyhow::Result<bool> {
         original.validate(&operation)?;
-        self.begin_close_inner(operation, Some(original)).await
+        self.begin_close_inner(operation, Some(original), None, || Ok(()))
+            .await
     }
     /// Historical lookup only. The caller still needs authenticated lookup authority;
     /// returning these bytes never grants permission to retry delivery.
@@ -407,17 +413,59 @@ impl HostLedger {
         Ok(original)
     }
     pub async fn begin_close(&self, operation: Operation) -> anyhow::Result<bool> {
-        self.begin_close_inner(operation, None).await
+        self.begin_close_inner(operation, None, None, || Ok(()))
+            .await
     }
-    async fn begin_close_inner(
+    pub(super) async fn begin_close_authorized<F>(
+        &self,
+        operation: Operation,
+        original: OriginalCloseRequest,
+        binding: Vec<u8>,
+        recovery_revision: u64,
+        before_commit: F,
+    ) -> anyhow::Result<bool>
+    where
+        F: FnOnce() -> anyhow::Result<()> + Send + 'static,
+    {
+        original.validate(&operation)?;
+        self.begin_close_inner(
+            operation,
+            Some(original),
+            Some((binding, recovery_revision)),
+            before_commit,
+        )
+        .await
+    }
+    async fn begin_close_inner<F>(
         &self,
         operation: Operation,
         original: Option<OriginalCloseRequest>,
-    ) -> anyhow::Result<bool> {
+        binding: Option<(Vec<u8>, u64)>,
+        before_commit: F,
+    ) -> anyhow::Result<bool>
+    where
+        F: FnOnce() -> anyhow::Result<()> + Send + 'static,
+    {
         self.validate(&operation)?;
         let this = self.clone();
         tokio::spawn(async move {
             let _guard = this.serial.lock().await;
+            if let Some((expected, recovery_revision)) = &binding {
+                let enrollment = this.enrollment().await?;
+                anyhow::ensure!(
+                    enrollment.recovery_revision == *recovery_revision,
+                    "provider reconciliation advanced"
+                );
+                anyhow::ensure!(
+                    enrollment.provider_initialized,
+                    "provider initialization unavailable"
+                );
+                anyhow::ensure!(
+                    this.db.get(b"provider_binding".to_vec()).await?.as_ref() == Some(expected),
+                    "provider anchor unavailable"
+                );
+                this.provider_revision().await?;
+            }
             let key = operation_key(operation.operation_id);
             if let Some(raw) = this.db.get(key.clone()).await? {
                 let saved: Receipt = serde_json::from_slice(&raw)?;
@@ -438,6 +486,10 @@ impl HostLedger {
                 }
                 return Ok(false);
             }
+            anyhow::ensure!(
+                this.db.get(b"provider_revoked".to_vec()).await?.is_none(),
+                "provider authority revoked"
+            );
             let mut state = this.enrollment().await?;
             if state.admission != Admission::Open
                 || state.closed
@@ -475,23 +527,44 @@ impl HostLedger {
                 operation,
                 evidence_class: None,
             };
-            this.db
-                .write_batch([
-                    crate::local_store::LocalKvBatchOp::put(key, serde_json::to_vec(&receipt)?),
-                    crate::local_store::LocalKvBatchOp::put(
-                        b"enrollment".to_vec(),
-                        serde_json::to_vec(&state)?,
-                    ),
-                    crate::local_store::LocalKvBatchOp::put(
-                        b"closing_intent".to_vec(),
-                        serde_json::to_vec(&intent)?,
-                    ),
-                ])
-                .await?;
+            let mut batch = vec![
+                crate::local_store::LocalKvBatchOp::put(key, serde_json::to_vec(&receipt)?),
+                crate::local_store::LocalKvBatchOp::put(
+                    b"enrollment".to_vec(),
+                    serde_json::to_vec(&state)?,
+                ),
+                crate::local_store::LocalKvBatchOp::put(
+                    b"closing_intent".to_vec(),
+                    serde_json::to_vec(&intent)?,
+                ),
+            ];
+            if binding.is_some() {
+                let revision = this
+                    .provider_revision()
+                    .await?
+                    .checked_add(1)
+                    .context("provider revision exhausted")?;
+                batch.push(crate::local_store::LocalKvBatchOp::put(
+                    b"provider_revision".to_vec(),
+                    serde_json::to_vec(&revision)?,
+                ));
+            }
+            before_commit()?;
+            this.db.write_batch(batch).await?;
             Ok(true)
         })
         .await
         .context("join process close claim")?
+    }
+    pub(super) async fn provider_revision(&self) -> anyhow::Result<u64> {
+        let raw = self
+            .db
+            .get(b"provider_revision".to_vec())
+            .await?
+            .context("provider revision missing")?;
+        let revision: u64 = serde_json::from_slice(&raw)?;
+        anyhow::ensure!(revision > 0, "invalid provider revision");
+        Ok(revision)
     }
     pub async fn lookup(&self, operation: &Operation) -> anyhow::Result<Option<Receipt>> {
         self.validate(operation)?;

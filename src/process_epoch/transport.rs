@@ -69,6 +69,26 @@ impl ExactChannel {
         )
         .await
     }
+    pub(super) async fn lookup_signed(
+        &self,
+        operation: uuid::Uuid,
+        authority: Vec<u8>,
+    ) -> anyhow::Result<Vec<u8>> {
+        ensure!(
+            !operation.is_nil() && authority.len() <= 262144,
+            "invalid captured lookup"
+        );
+        self.collect(
+            self.client
+                .get(
+                    self.endpoint
+                        .join(&format!("process-epoch-operations/{operation}"))?,
+                )
+                .header("content-type", "application/json")
+                .body(authority),
+        )
+        .await
+    }
     async fn collect(&self, request: reqwest::RequestBuilder) -> anyhow::Result<Vec<u8>> {
         let mut response = request
             .send()
@@ -90,4 +110,4 @@ impl ExactChannel {
     }
 }
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

@@ -1,9 +1,9 @@
-# T-536 implementation checkpoint
+# T-536 provider implementation
 
 Approved provider plan: branch `nikhil/process-epoch-fence-plan`, through
 `0b25607adfb5adc1c58dfb2d55cac89023c4dfda`. The coordinator authorized the conservative
 host-ledger/routing/forwarding/refusal implementation after the root-threat review.
-The joint lifecycle contract is still being consolidated. Nothing here composes
+The exact joint lifecycle contract r3 at `42ae960e` is confirmed. Nothing here composes
 bind/release, enables consumers, or advertises a managed capability.
 
 This first commit contains the isolated durable operation ledger, typed records,
@@ -77,14 +77,14 @@ still pending. Receipt references are untrusted data, not host-stop proof object
 The accepted commit-1 ledger and its eleven tests are unchanged. No capability,
 consumer, route or image behavior is activated.
 
-## Commit 2 checkpoint — not ready for its gate
+## Commit 2 historical checkpoints
 
 The reserved epoch namespace now refuses before generic gateway authentication/
 routing and before node proxy classification. The red gateway test recorded
 Schedule/LookupNode calls; the red node test entered auto-resume on a paused fixture.
 Both focused regressions pass after the refusal guards.
 
-The candidate pin verifier currently compiles only in tests. It proves signatures
+At the first checkpoint the candidate pin verifier compiled only in tests. It proves signatures
 and exact captured coordinates against test host pins, including correctly re-signed
 foreign bodies and stale envelope authority. It does not implement authenticated
 provisioning or a production authority factory. Do not use it as that proof.
@@ -149,3 +149,85 @@ Local checkpoint validation uses `CARGO_BUILD_JOBS=1` and
 
 Logs use `/tmp/lanes/aenv3-c2-original-transport-{lib-final,build,clippy}.log`.
 Fork Actions remains disabled pending the admin opt-in; this is local evidence.
+
+## Commit 2: authenticated participant
+
+`HostTrust::verify` authenticates canonical host enrollment and build manifest
+records with separate operator and release roots. It checks the exact allocation,
+enrollment and recovery revisions, existing funded session, controller key and trust
+revision, expiry, independently approved manifest hash, protocol schema, build and
+host-mapped tools artifact. `VerifiedEnrollment` has no public unchecked constructor.
+The frozen v1 vectors are unchanged.
+
+`Participant::new` checks the host signing key and both certificate fingerprints
+against that enrollment before constructing the exact mutual-TLS channel. The seal
+participant verifies controller authority, then atomically closes admission, freezes
+inventory and saves the original signed request before one POST. The claim rechecks
+the captured recovery revision under the ledger lock, so reconciliation cannot admit
+a queued old participant. Caller cancellation
+does not cancel the claimed continuation. Lost responses retain the claim; recovery
+uses an authorized GET for the exact saved operation, never another POST. Generic
+routes remain refused and no consumer or managed capability is enabled.
+
+Provider initialization is stamped in the parent enrollment in the same synchronous
+batch as its immutable binding and revision. Missing binding, revision or first
+mirrored report refuses recovery instead of resetting authority or replacing evidence.
+A reopened closed ledger needs a new signed reconciliation attestation for its exact
+recovery revision. This restores closed lookup only, never opens the old epoch.
+
+Mirroring stores the first canonical guest-signed response and advances the durable
+revision atomically. Every disclosure revalidates stored bytes and current caller
+proof. Historical guest signature expiry does not prevent recovery with fresh lookup
+authority. `AuthenticatedResponse` returns the node-signed LookupResponse and the
+original guest SignedRecord; the node evidence digest binds that complete backing
+record. A guest completion claim remains `guest_reported` and an incomplete outcome.
+No node signature or mirror turns it into cessation, settlement or funding evidence.
+
+### Provisioning handoff and release dependencies
+
+The operator enrollment signer must independently establish the exact host runtime,
+incarnation, boot/endpoint, enrolled keys and mapped artifact before signing. Comparing
+a caller's descriptor to another caller-supplied value is not sufficient. The release
+signer identifies the initial approved artifact, not continuing guest honesty. This
+cut supplies the verifier and callable participant; the production workload-identity,
+host-inventory and per-boot certificate provisioning adapter remains uninstalled.
+
+Trust roots, approved manifest policy, node signing keys, client identity and ledger
+must be provisioned outside tenant-accessible storage. Separate operator, release
+and controller roots sign distinct domains. Enrollment signing uses
+`agentenv-process-epoch/host-enrollment/v1`; manifest signing uses
+`agentenv-process-epoch/release-manifest/v1`, each followed by NUL and canonical bytes.
+The operator controls key creation and distribution. Rotation/revocation must first
+close old admission and preserve its ledger; this cut refuses an in-place anchor or
+trust replacement. It does not supply an automatic key-rotation or re-enrollment path.
+Existing participants require explicit host revocation and expiry; replacing a config
+object alone is not live revocation. No secrets or signer endpoint are exposed by RPC.
+
+Real TLS fixtures exercise the production participant factory and exact signed POST.
+They do not count as patched-guest, malicious-root, process/PTY or host cessation
+proofs. Those fixtures, independently conclusive whole-domain cessation, lifecycle
+bind/release composition, production provisioning and field-8 image/build evidence
+remain release dependencies. No success receipt constructor is added here.
+
+### Commit 2 regression evidence
+
+Red logs under `/tmp/lanes/aenv3-c2-` include `enrollment-red` (unavailable verifier),
+`participant-red` (unavailable participant), `anchor-red` (missing anchor and revision),
+`evidence-red` (missing backing signature, corrupt mirror and historical expiry),
+`lookup-expiry-red` (expiry at the admission barrier), and `loss-red` (lost child records
+incorrectly healed), and `reconciliation-race-red` (old participant forwarded after
+reconciliation advanced). Each command exited 101 before its fix. Tests retain whole-ledger
+comparisons and exact request/count assertions. The final local commands and exit
+codes are recorded in the PR; Actions still requires the administrator opt-in.
+
+Final library validation: `CARGO_BUILD_JOBS=1
+CARGO_TARGET_DIR=/workspace/lanes/agentenv-fast-boot-f1/target cargo test --locked --lib`
+exited 0: 813 passed, four existing ignored tests unchanged, including all 45
+process-epoch tests. The final race regression failed first with one POST instead of
+zero, then passed in this full run. Log: `/tmp/lanes/aenv3-c2-final-lib-r2.log`.
+
+On the same final code, `cargo build --locked --lib --bin server` and
+`cargo clippy --locked --lib --bin server --tests -- -D warnings` both exited 0.
+Logs: `/tmp/lanes/aenv3-c2-final-{build,clippy}-r2.log`, adjacent `.exit` files.
+`cargo fmt --all -- --check` and `git diff --check` also exited 0. Fork Actions
+remains disabled pending administrator opt-in; these results are local evidence.

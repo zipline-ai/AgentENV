@@ -1,6 +1,5 @@
-//! Verification against host-owned provisioning pins. The pins are not request
-//! data. Loading them from authenticated enrollment/provisioning is a separate
-//! factory prerequisite; no production factory installs this dormant verifier.
+//! Verification against host-owned pins obtained from authenticated enrollment.
+//! The participant remains dormant; production provisioning and routes are not installed.
 use super::{wire, Allocation, Operation};
 use anyhow::{ensure, Context};
 use sha2::{Digest, Sha256};
