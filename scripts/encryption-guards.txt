@@ -1,0 +1,11 @@
+# Grow-only node encryption guards. PR4's envelope guards are unioned on rebase.
+PolicyStrippedCreate volume::policy::tests::stripped_encrypted_create_denied
+PolicyStrippedRestoreReopen volume::policy::tests::retained_restore_and_reopen_deny_stripped_payload
+PolicyConfigurationLoss volume::policy::tests::configuration_loss_never_selects_legacy
+PolicyUnknown volume::policy::tests::unknown_policy_and_history_deny
+PolicyUnknownDispatch volume::policy::tests::unknown_dispatch_or_inactive_authority_denied
+PolicyExactObservation volume::policy::tests::policy_response_must_match_exact_observation
+PolicyIncompleteObservation volume::policy::tests::incomplete_observation_denied_before_lookup
+PolicyInvalidPayload volume::policy::tests::invalid_payload_cannot_choose_plaintext
+PolicyLegacyControl volume::policy::tests::proven_legacy_is_the_only_omission_control
+PolicyPresentNoDowngrade volume::policy::tests::present_payload_never_downgrades_to_legacy
