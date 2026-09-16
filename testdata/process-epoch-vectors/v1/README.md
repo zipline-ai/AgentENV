@@ -3,7 +3,8 @@
 Contract: zippy `42ae960e`, process-epoch contract r3. Vector-content freeze commit: `eb1c0e4d1df0cf4d01218efcb6774b36bb5c3242`.
 The original body/signature fixtures remain unchanged. The receipt addendum is
 specified in [ADDENDUM.md](ADDENDUM.md), with its own `addendum-manifest.json`.
-Addendum content freeze: pending publication commit.
+Addendum content freeze: `e976f0df95fcda5bcaa634305c48e1b04cb37c5c`.
+This README publication adds no changes to those fixture bytes.
 Vendor this directory verbatim. The Go reference package is `services/processepoch`;
 the Rust reference module is `src/process_epoch/wire`. Both consume these exact
 fixtures. `schema.json` defines field order, vocabulary and structural relationships.
