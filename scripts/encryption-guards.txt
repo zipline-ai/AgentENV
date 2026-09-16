@@ -9,3 +9,11 @@ PolicyIncompleteObservation volume::policy::tests::incomplete_observation_denied
 PolicyInvalidPayload volume::policy::tests::invalid_payload_cannot_choose_plaintext
 PolicyLegacyControl volume::policy::tests::proven_legacy_is_the_only_omission_control
 PolicyPresentNoDowngrade volume::policy::tests::present_payload_never_downgrades_to_legacy
+LaunchBodyGoVectors volume::wire::tests::go_vectors_preserve_exact_body_and_distinct_hash
+LaunchBodyAbsence volume::wire::tests::absent_envelope_preserves_bytes_without_selecting_legacy
+LaunchBodyDuplicateKeys volume::wire::tests::duplicate_keys_at_any_depth_are_rejected
+LaunchBodyTerminalEnvelope volume::wire::tests::root_envelope_must_be_unique_terminal_and_exactly_appended
+LaunchBodyInvalidEnvelope volume::wire::tests::invalid_envelope_never_becomes_absence
+LaunchBodyStrictSource volume::wire::tests::unknown_source_empty_body_and_trailing_data_deny
+LaunchBodyChangedBytes volume::wire::tests::body_changes_are_preserved_for_authenticated_hash_comparison
+LaunchBodyBounds volume::wire::tests::oversized_or_deep_wire_is_rejected_without_echoing_secrets
