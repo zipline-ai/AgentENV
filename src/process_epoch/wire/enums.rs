@@ -55,6 +55,7 @@ pub fn enum_values(kind: &str) -> Option<&'static [&'static str]> {
             "release",
             "dispatch_result",
             "host_cessation",
+            "dispatch_result_v2",
         ]),
         "result_dispatch_kind" => Some(&["create", "restore"]),
         "dispatch_outcome" => Some(&["running", "failed", "unknown"]),
@@ -64,6 +65,7 @@ pub fn enum_values(kind: &str) -> Option<&'static [&'static str]> {
             "owner_delete",
             "epoch_seal_retire",
         ]),
+        "dispatch_result_protocol_v2" => Some(&["agentenv-process-epoch-dispatch-result-v2"]),
         _ => None,
     }
 }

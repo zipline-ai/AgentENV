@@ -650,3 +650,243 @@ func TestAddendumThreeResponseMapping(t *testing.T) {
 		})
 	}
 }
+
+func TestAddendumFourRecordsAreCanonical(t *testing.T) {
+	var manifest struct{ Positive []string }
+	readFixture(t, "addendum-4-manifest.json", &manifest)
+	for _, name := range manifest.Positive {
+		var v map[string]string
+		readFixture(t, name, &v)
+		if _, err := DecodeCanonical(v["kind"], unhex(t, v["canonical_hex"])); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestAddendumFourVectorsAndEd25519MatchRust(t *testing.T) {
+	var manifest struct {
+		Positive []string
+		Seed     string `json:"test_only_ed25519_seed_hex"`
+	}
+	readFixture(t, "addendum-4-manifest.json", &manifest)
+	for _, name := range manifest.Positive {
+		t.Run(name, func(t *testing.T) {
+			var v map[string]string
+			readFixture(t, name, &v)
+			body := unhex(t, v["canonical_hex"])
+			if _, e := DecodeCanonical(v["kind"], body); e != nil {
+				t.Fatal(e)
+			}
+			sum := sha256.Sum256(body)
+			if hex.EncodeToString(sum[:]) != v["sha256"] {
+				t.Fatal("body hash")
+			}
+			envelope := unhex(t, v["envelope_hex"])
+			input, e := SignatureInput(envelope)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if !bytes.Equal(input, unhex(t, v["signature_input_hex"])) {
+				t.Fatal("signature bytes")
+			}
+			key, sig := unhex(t, v["public_key_hex"]), unhex(t, v["signature_hex"])
+			if e = VerifySignature(envelope, key, sig); e != nil {
+				t.Fatal(e)
+			}
+			if !bytes.Equal(ed25519.Sign(ed25519.NewKeyFromSeed(unhex(t, manifest.Seed)), input), sig) {
+				t.Fatal("signature mismatch")
+			}
+			var original SignedEnvelope
+			if e = json.Unmarshal(envelope, &original); e != nil {
+				t.Fatal(e)
+			}
+			if e = VerifyRecord(v["kind"], original.Domain, body, envelope, key, sig); e != nil {
+				t.Fatal(e)
+			}
+			if VerifyRecord(v["kind"], "wrong-domain", body, envelope, key, sig) == nil {
+				t.Fatal("wrong domain accepted")
+			}
+			var changed SignedEnvelope
+			if e = json.Unmarshal(envelope, &changed); e != nil {
+				t.Fatal(e)
+			}
+			if changed.Domain == "agentenv-process-epoch/lookup/v1" {
+				changed.Domain = "agentenv-process-epoch/seal/v1"
+			} else {
+				changed.Domain = "agentenv-process-epoch/lookup/v1"
+			}
+			b, _ := marshal(changed)
+			if VerifySignature(b, key, sig) == nil {
+				t.Fatal("wrong domain accepted")
+			}
+			if e = json.Unmarshal(envelope, &changed); e != nil {
+				t.Fatal(e)
+			}
+			changed.EnrollmentRevision++
+			b, _ = marshal(changed)
+			if VerifySignature(b, key, sig) == nil {
+				t.Fatal("wrong enrollment accepted")
+			}
+			sig[0] ^= 1
+			if VerifySignature(envelope, key, sig) == nil {
+				t.Fatal("changed signature accepted")
+			}
+		})
+	}
+}
+func TestAddendumFourNegativeVectorsAreNeverRepaired(t *testing.T) {
+	var all []map[string]string
+	readFixture(t, "negative-addendum-4.json", &all)
+	for _, v := range all {
+		t.Run(v["name"], func(t *testing.T) {
+			if _, e := DecodeCanonical(v["kind"], unhex(t, v["canonical_hex"])); e == nil {
+				t.Fatal("accepted invalid bytes")
+			}
+		})
+	}
+}
+
+// Fixture verifier only: these comparisons do not authorize a lifecycle transition.
+func TestAddendumFourResponseMapping(t *testing.T) {
+	var manifest struct {
+		Contexts []struct {
+			Name, Source string
+			Binding      EpochBinding
+			RequestHash  string `json:"request_sha256"`
+			Nonce        string
+			ReceiptKind  string `json:"receipt_kind"`
+			State        string
+			Accepted     bool
+		}
+	}
+	readFixture(t, "addendum-4-manifest.json", &manifest)
+	octets := func(v []uint16) []byte {
+		b := make([]byte, len(v))
+		for i, n := range v {
+			if n > 255 {
+				t.Fatal("octet")
+			}
+			b[i] = byte(n)
+		}
+		return b
+	}
+	hash := func(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
+	for _, ctx := range manifest.Contexts {
+		t.Run(ctx.Name, func(t *testing.T) {
+			var v, source map[string]string
+			readFixture(t, ctx.Name, &v)
+			readFixture(t, ctx.Source, &source)
+			raw := unhex(t, v["canonical_hex"])
+			_, err := DecodeCanonical("ReceiptResponse", raw)
+			var response ReceiptResponse
+			if e := json.Unmarshal(raw, &response); e != nil {
+				t.Fatal(e)
+			}
+			var result LookupResponse
+			if e := json.Unmarshal(octets(response.Node.Body), &result); e != nil {
+				t.Fatal(e)
+			}
+			var fresh SignedEnvelope
+			json.Unmarshal(octets(response.Node.Envelope), &fresh)
+			key := unhex(t, source["public_key_hex"])
+			accepted := err == nil && response.Guest == nil && VerifyRecord("LookupResponse", "agentenv-process-epoch/node-response/v1", octets(response.Node.Body), octets(response.Node.Envelope), key, octets(response.Node.Signature)) == nil
+			b, _ := marshal(result.Binding)
+			expected, _ := marshal(ctx.Binding)
+			accepted = accepted && bytes.Equal(b, expected) && result.RequestSha256 == ctx.RequestHash && result.State == ctx.State && fresh.Nonce == ctx.Nonce && fresh.RequestSha256 == ctx.RequestHash && result.ReceiptKind != nil && *result.ReceiptKind == ctx.ReceiptKind
+			if response.Receipt == nil {
+				accepted = false
+			} else {
+				r := response.Receipt
+				rb := octets(r.Body)
+				re := octets(r.Envelope)
+				kind := map[string]string{"dispatch_result_v2": "DispatchResultV2", "host_cessation": "HostCessationEvidence"}[ctx.ReceiptKind]
+				accepted = accepted && VerifyRecord(kind, "agentenv-process-epoch/node-response/v1", rb, re, key, octets(r.Signature)) == nil
+				canonicalRecord, _ := marshal(r)
+				var historical SignedEnvelope
+				json.Unmarshal(re, &historical)
+				var original map[string]any
+				json.Unmarshal(rb, &original)
+				id, request := original["operation_id"], original["dispatch_request_sha256"]
+				if ctx.ReceiptKind == "host_cessation" {
+					id, request = original["retirement_operation_id"], original["retirement_request_sha256"]
+				}
+				accepted = accepted && result.ReceiptId != nil && *result.ReceiptId == id && id == ctx.Binding.OperationId && request == ctx.RequestHash && result.ReceiptSha256 != nil && *result.ReceiptSha256 == hash(canonicalRecord) && historical.RequestSha256 == hash(rb) && historical.BodySha256 == hash(rb) && fresh.Nonce != historical.Nonce
+				accepted = accepted && bytes.Equal(rb, unhex(t, source["canonical_hex"])) && bytes.Equal(re, unhex(t, source["envelope_hex"])) && bytes.Equal(octets(r.Signature), unhex(t, source["signature_hex"]))
+				for _, field := range []string{"runtime_id", "runtime_incarnation"} {
+					var saved map[string]any
+					json.Unmarshal(expected, &saved)
+					accepted = accepted && original[field] == saved[field]
+				}
+				if kind == "DispatchResultV2" {
+					var saved map[string]any
+					json.Unmarshal(expected, &saved)
+					for _, field := range []string{"node_id", "node_incarnation", "guest_boot_id", "process_endpoint", "guest_build_sha256", "enrollment_revision"} {
+						accepted = accepted && original[field] == saved[field]
+					}
+				}
+				accepted = accepted && fresh.RuntimeId == historical.RuntimeId && fresh.RuntimeIncarnation == historical.RuntimeIncarnation
+				accepted = accepted && fresh.NodeId == historical.NodeId && fresh.NodeIncarnation == historical.NodeIncarnation && fresh.EnrollmentRevision == historical.EnrollmentRevision && fresh.Audience == historical.Audience
+			}
+			if accepted != ctx.Accepted {
+				t.Fatalf("accepted=%v want=%v", accepted, ctx.Accepted)
+			}
+		})
+	}
+}
+
+// This models the resolver's wire comparison, not a real host cessation primitive.
+func TestAddendumFourRetirementUsesPreviouslyCapturedHostAllocation(t *testing.T) {
+	var manifest struct {
+		Cases []struct {
+			Dispatch string `json:"dispatch_response"`
+			Evidence string `json:"evidence_response"`
+			Accepted bool
+		} `json:"allocation_cases"`
+	}
+	readFixture(t, "addendum-4-manifest.json", &manifest)
+	octets := func(v []uint16) []byte {
+		b := make([]byte, len(v))
+		for i, n := range v {
+			if n > 255 {
+				t.Fatal("octet")
+			}
+			b[i] = byte(n)
+		}
+		return b
+	}
+	load := func(name, kind string) (map[string]any, SignedEnvelope, bool) {
+		var v map[string]string
+		readFixture(t, name, &v)
+		var response ReceiptResponse
+		json.Unmarshal(unhex(t, v["canonical_hex"]), &response)
+		if response.Receipt == nil {
+			t.Fatal("fixture receipt missing")
+		}
+		var lookup LookupResponse
+		json.Unmarshal(octets(response.Node.Body), &lookup)
+		r := response.Receipt
+		var e SignedEnvelope
+		json.Unmarshal(octets(r.Envelope), &e)
+		rb, _ := marshal(r)
+		sum := sha256.Sum256(rb)
+		valid := VerifyRecord("LookupResponse", "agentenv-process-epoch/node-response/v1", octets(response.Node.Body), octets(response.Node.Envelope), unhex(t, v["public_key_hex"]), octets(response.Node.Signature)) == nil && VerifyRecord(kind, "agentenv-process-epoch/node-response/v1", octets(r.Body), octets(r.Envelope), unhex(t, v["public_key_hex"]), octets(r.Signature)) == nil && lookup.ReceiptSha256 != nil && *lookup.ReceiptSha256 == hex.EncodeToString(sum[:])
+		var b map[string]any
+		json.Unmarshal(octets(r.Body), &b)
+		return b, e, valid
+	}
+	var authorityFixture map[string]string
+	readFixture(t, "Addendum2Retirement.json", &authorityFixture)
+	var authority RetirementAuthority
+	json.Unmarshal(unhex(t, authorityFixture["canonical_hex"]), &authority)
+	for _, c := range manifest.Cases {
+		t.Run(c.Dispatch+"/"+c.Evidence, func(t *testing.T) {
+			dispatch, de, valid := load(c.Dispatch, "DispatchResultV2")
+			evidence, ee, evalid := load(c.Evidence, "HostCessationEvidence")
+			allocation, ok := dispatch["host_allocation_id"].(string)
+			accepted := valid && evalid && ok && allocation != "" && dispatch["outcome"] == "running" && evidence["host_allocation_id"] == allocation && evidence["runtime_id"] == dispatch["runtime_id"] && evidence["runtime_incarnation"] == dispatch["runtime_incarnation"] && de.EnrollmentRevision == ee.EnrollmentRevision && de.NodeId == ee.NodeId && de.NodeIncarnation == ee.NodeIncarnation && evidence["retirement_operation_id"] == authority.OperationId && evidence["retirement_request_sha256"] == authorityFixture["sha256"] && evidence["runtime_id"] == authority.RuntimeId && evidence["runtime_incarnation"] == authority.RuntimeIncarnation && ee.EnrollmentRevision == authority.EnrollmentRevision && evidence["no_second_copy"] == true
+			if accepted != c.Accepted {
+				t.Fatalf("allocation resolver accepted=%v want=%v", accepted, c.Accepted)
+			}
+		})
+	}
+}

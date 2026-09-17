@@ -1135,6 +1135,77 @@ func (v HostCessationEvidence) validate() error {
 	}
 	return validateRelations("HostCessationEvidence", v)
 }
+
+type DispatchResultV2 struct {
+	Protocol              string `json:"protocol"`
+	DispatchKind          string `json:"dispatch_kind"`
+	OperationId           string `json:"operation_id"`
+	DispatchRequestSha256 string `json:"dispatch_request_sha256"`
+	NodeId                string `json:"node_id"`
+	NodeIncarnation       string `json:"node_incarnation"`
+	RuntimeId             string `json:"runtime_id"`
+	RuntimeIncarnation    string `json:"runtime_incarnation"`
+	HostAllocationId      string `json:"host_allocation_id"`
+	GuestBootId           string `json:"guest_boot_id"`
+	ProcessEndpoint       string `json:"process_endpoint"`
+	GuestBuildSha256      string `json:"guest_build_sha256"`
+	EnrollmentRevision    uint64 `json:"enrollment_revision"`
+	NodeLedgerRevision    uint64 `json:"node_ledger_revision"`
+	Outcome               string `json:"outcome"`
+	NodeObservedAt        uint64 `json:"node_observed_at"`
+}
+
+func (v DispatchResultV2) validate() error {
+	if err := checkScalar("dispatch_result_protocol_v2", v.Protocol); err != nil {
+		return err
+	}
+	if err := checkScalar("result_dispatch_kind", v.DispatchKind); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.OperationId); err != nil {
+		return err
+	}
+	if err := checkScalar("hash", v.DispatchRequestSha256); err != nil {
+		return err
+	}
+	if err := checkScalar("text", v.NodeId); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.NodeIncarnation); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.RuntimeId); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.RuntimeIncarnation); err != nil {
+		return err
+	}
+	if err := checkScalar("text", v.HostAllocationId); err != nil {
+		return err
+	}
+	if err := checkScalar("uuid", v.GuestBootId); err != nil {
+		return err
+	}
+	if err := checkScalar("text", v.ProcessEndpoint); err != nil {
+		return err
+	}
+	if err := checkScalar("hash", v.GuestBuildSha256); err != nil {
+		return err
+	}
+	if err := checkScalar("positive", v.EnrollmentRevision); err != nil {
+		return err
+	}
+	if err := checkScalar("positive", v.NodeLedgerRevision); err != nil {
+		return err
+	}
+	if err := checkScalar("dispatch_outcome", v.Outcome); err != nil {
+		return err
+	}
+	if err := checkScalar("positive", v.NodeObservedAt); err != nil {
+		return err
+	}
+	return validateRelations("DispatchResultV2", v)
+}
 func decode(kind string, data []byte) ([]byte, error) {
 	switch kind {
 	case "Descriptor":
@@ -1373,6 +1444,15 @@ func decode(kind string, data []byte) ([]byte, error) {
 		return marshal(v)
 	case "HostCessationEvidence":
 		var v HostCessationEvidence
+		if err := json.Unmarshal(data, &v); err != nil {
+			return nil, err
+		}
+		if err := v.validate(); err != nil {
+			return nil, err
+		}
+		return marshal(v)
+	case "DispatchResultV2":
+		var v DispatchResultV2
 		if err := json.Unmarshal(data, &v); err != nil {
 			return nil, err
 		}

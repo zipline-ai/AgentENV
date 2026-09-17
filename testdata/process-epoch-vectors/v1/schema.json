@@ -94,7 +94,8 @@
       "bind",
       "release",
       "dispatch_result",
-      "host_cessation"
+      "host_cessation",
+      "dispatch_result_v2"
     ],
     "result_dispatch_kind": [
       "create",
@@ -110,6 +111,9 @@
       "policy_exhausted",
       "owner_delete",
       "epoch_seal_retire"
+    ],
+    "dispatch_result_protocol_v2": [
+      "agentenv-process-epoch-dispatch-result-v2"
     ]
   },
   "types": {
@@ -1074,6 +1078,72 @@
         "name": "node_ledger_revision",
         "type": "positive"
       }
+    ],
+    "DispatchResultV2": [
+      {
+        "name": "protocol",
+        "type": "dispatch_result_protocol_v2"
+      },
+      {
+        "name": "dispatch_kind",
+        "type": "result_dispatch_kind"
+      },
+      {
+        "name": "operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "dispatch_request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "node_id",
+        "type": "text"
+      },
+      {
+        "name": "node_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "host_allocation_id",
+        "type": "text"
+      },
+      {
+        "name": "guest_boot_id",
+        "type": "uuid"
+      },
+      {
+        "name": "process_endpoint",
+        "type": "text"
+      },
+      {
+        "name": "guest_build_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "enrollment_revision",
+        "type": "positive"
+      },
+      {
+        "name": "node_ledger_revision",
+        "type": "positive"
+      },
+      {
+        "name": "outcome",
+        "type": "dispatch_outcome"
+      },
+      {
+        "name": "node_observed_at",
+        "type": "positive"
+      }
     ]
   },
   "rules": {
@@ -1589,9 +1659,12 @@
           "state",
           "dispatch_completed"
         ],
-        "value": [
+        "one_of": [
           "receipt_kind",
-          "dispatch_result"
+          [
+            "dispatch_result",
+            "dispatch_result_v2"
+          ]
         ]
       },
       {
@@ -1629,6 +1702,16 @@
         "value": [
           "state",
           "retired"
+        ]
+      },
+      {
+        "when": [
+          "receipt_kind",
+          "dispatch_result_v2"
+        ],
+        "value": [
+          "state",
+          "dispatch_completed"
         ]
       }
     ],
