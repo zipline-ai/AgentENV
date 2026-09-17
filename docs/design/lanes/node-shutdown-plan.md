@@ -67,3 +67,22 @@ SIGTERM, keep-alive admission, accepted lifecycle work and cleanup failure.
 Separate library tests cover bidirectional upgraded transport teardown and the
 orchestrator admission/guest-preservation boundary. These are deterministic
 transport and mocked lifecycle proofs, not a real KVM/ublk preservation claim.
+
+## R3: accepted lifecycle ownership
+
+The gate reproduction `review_shutdown_must_join_accepted_create_before_metadata`
+failed at r2 (exit 101): a backend held in StartNowait had no metadata yet, so
+cleanup could finish before the accepted create. The orchestrator now registers
+each cancellation-safe operation under the same synchronous lock that closes
+admission. Registration precedes task spawning and all backend effects. Shutdown
+awaits the closed task registry before scanning metadata or preserving guests;
+HTTP cancellation cannot remove these registrations. No lifecycle timeout or
+abort is introduced. An accepted-task panic is retained as a failure, while
+cleanup still attempts to preserve known guests.
+
+The real HTTP/orchestrator regression holds backend start before metadata, then
+signals shutdown and proves main remains pending after the HTTP drain deadline.
+After release, it proves one exact backend stop, no metadata row, and an empty
+lifecycle registry before return. Late-admission and panic controls cover zero
+effects and failure reporting. This joins accepted work; it does not establish
+a whole-node time bound or replace T-629's real-guest proof.
