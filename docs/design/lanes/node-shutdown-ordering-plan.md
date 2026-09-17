@@ -50,9 +50,27 @@ reporter joins. Run proxy/orchestrator/persistence tests, fmt and clippy.
 **Next disposable proof.** Repeat the isolated real running/paused guests,
 held proxy, reporter-held and lifecycle barriers, exact hashes/counters/volumes,
 upgrade/rollback, and unchanged 30-second systemd stop. Include interrupted
-Resuming retention without claiming automatic recovery. Add T-633's old ublk
-socket-delay beyond 30 seconds, checking actual daemon exit/readiness and guest
-fidelity; review the external fault mechanism first because the resident stop
-helper kills/unlinks after ~10 seconds. Do not bypass the helper or shrink cleanup budgets. Archive and delete resources.
-Rollout remains blocked on real cleanup/recovery proof, including unresolved
-Resuming recovery; telemetry changes alone cannot guarantee whole-node timing.
+Resuming retention without claiming automatic recovery. Archive and delete
+resources. Rollout remains blocked on real cleanup/recovery proof, including
+unresolved Resuming recovery; telemetry changes alone cannot guarantee timing.
+
+**T-633 fault mechanism (part of this PR's test harness).** After real guests
+are paused/persisted and the actual daemon has exited, keep the service stopped.
+A pipe-controlled subprocess owns the configured Unix socket as an injected old
+socket; it accepts and closes probes without speaking the daemon protocol. Run
+the real `UblkDaemonClient::spawn` with the unchanged 30-second startup deadline
+and actual daemon binary from a standalone diagnostic harness, outside systemd.
+Hold the socket until the timeout is observed; then command the holder to close,
+join its PID, and retry startup. No sleeps establish the barrier. Continuous
+acceptance avoids accidentally testing a full listen backlog instead.
+
+Expected: while held, startup times out without spawning a replacement, unlinking
+the owned socket or advertising readiness; after release, the real daemon starts,
+GetFeatures succeeds, and the same paused guests restore with file/memory/volume
+fidelity. Premature spawn/unlink/readiness, a hang beyond the deadline, or failed
+restore is FAIL. Record holder PID/socket inode, spawn/exit events and elapsed
+time. This is an injected socket-ownership test, **not** evidence of an actual
+old daemon completing cleanup or a <30-second unit restart. Keep the real-daemon
+exit and unchanged-systemd tests separate. No stop-helper change is needed: the
+standalone harness is never an ExecStopPost participant and cannot bypass it in
+a service restart. Do not add a production helper bypass or timeout override.
