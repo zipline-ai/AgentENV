@@ -1,10 +1,11 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 use agentenv::api::shutdown::{cleanup_phase, serve_with_shutdown, HTTP_DRAIN_BUDGET};
 use agentenv::api::{server, ApiImpl};
 use agentenv::api_key::ApiKey;
 use agentenv::identity::NodeIdentity;
 use agentenv::image::ImageResolver;
+use agentenv::observability::shutdown::{shutdown_with_reporter, REPORTER_SHUTDOWN_BUDGET};
 use agentenv::observability::{ObservabilityReporter, ObservabilityService};
 use agentenv::orchestrator::Orchestrator;
 use agentenv::overlaybd::OverlaybdP2pRuntime;
@@ -158,15 +159,10 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     info!(target: "agentenv", addr = %addr, "API server listening");
 
-    let shutdown_cleanup = async move {
+    let signal_at = Arc::new(OnceLock::new());
+    let cleanup_signal_at = signal_at.clone();
+    let guest_cleanup = async move {
         let mut failures = Vec::new();
-        if let Some(mut handle) = reporter.take() {
-            info!(target: "agentenv", "stopping observability reporter before process exit");
-            if let Err(err) = cleanup_phase("reporter", handle.shutdown()).await {
-                failures.push(format!("reporter: {err}"));
-                warn!(target: "agentenv", error = %err, "error occurred while shutting down observability reporter");
-            }
-        }
         info!(target: "agentenv", "stopping sandboxes before process exit");
         if let Err(err) = cleanup_phase("orchestrator", shutdown_orchestrator.shutdown()).await {
             failures.push(format!("orchestrator: {err}"));
@@ -203,12 +199,23 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    let shutdown_cleanup = async move {
+        let started = *cleanup_signal_at.get_or_init(tokio::time::Instant::now);
+        shutdown_with_reporter(
+            reporter.take(),
+            started + REPORTER_SHUTDOWN_BUDGET,
+            guest_cleanup,
+        )
+        .await
+    };
+
     serve_with_shutdown(
         listener,
         app,
         http_shutdown,
         async move {
             shutdown_signal().await;
+            let _ = signal_at.set(tokio::time::Instant::now());
             orchestrator.close_admission();
         },
         shutdown_cleanup,

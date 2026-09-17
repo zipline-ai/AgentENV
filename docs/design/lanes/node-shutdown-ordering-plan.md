@@ -1,6 +1,6 @@
 # T-631/T-632: preserve guests before shutdown telemetry
 
-Review only, fork main `8cda52c`. No production changes; preserve
+Implementation approved at `b2cdfe5c` with socket-fault addendum `1f4770f3`; based on fork main `8cda52c`. No production changes; preserve
 `TimeoutStopSec=30`, unit/package settings and HTTP drain.
 Evidence: zippy `node-rollout-proof.md` at `3f252273`, `/tmp/lanes/t629/`.
 
@@ -58,7 +58,7 @@ unresolved Resuming recovery; telemetry changes alone cannot guarantee timing.
 are paused/persisted and the actual daemon has exited, keep the service stopped.
 A pipe-controlled subprocess owns the configured Unix socket as an injected old
 socket; it accepts and closes probes without speaking the daemon protocol. Run
-the real `UblkDaemonClient::spawn` with the unchanged 30-second startup deadline
+the real `UblkDaemonClient::new` with the unchanged 30-second startup deadline
 and actual daemon binary from a standalone diagnostic harness, outside systemd.
 Hold the socket until the timeout is observed; then command the holder to close,
 join its PID, and retry startup. No sleeps establish the barrier. Continuous
@@ -74,3 +74,52 @@ old daemon completing cleanup or a <30-second unit restart. Keep the real-daemon
 exit and unchanged-systemd tests separate. No stop-helper change is needed: the
 standalone harness is never an ExecStopPost participant and cannot bypass it in
 a service restart. Do not add a production helper bypass or timeout override.
+
+
+## Implementation and validation
+
+The server closes admission synchronously, then `shutdown_with_reporter` joins
+reporting alongside the unchanged orchestrator → pool → ublk → P2P chain.
+`shutdown_until` cancels and joins only reporter senders; unregister is one
+best-effort call under the absolute signal + 2s deadline. Timeout is logged as
+unknown. This is **not a placement fence**: `report_ttl` defaults to 30s before
+observed status becomes UNHEALTHY, assignments remain, and discovery scheduling
+is not excluded by this reporting budget.
+
+The new ordering tests live in `src/orchestrator/shutdown_ordering_tests.rs`
+because the mock backend is library-test-only. They call the same production
+coordinator as the unchanged `tests/http_shutdown.rs` controls. The reporter
+uses real gRPC wire traffic against an isolated fake scheduler; an empty real
+observer orchestrator supplies telemetry, while the guest orchestrator has a
+mock backend and a synchronous disk persister. This proves scheduling and
+record retention, not KVM/ublk timing.
+
+Recorded REDs: `reporter_stall_cannot_delay_guest_persistence` timed out before
+persistence with the original sequential scheduling (exit 101);
+`crash_resuming_record_and_artifacts_survive_repeated_load` found the record
+missing with the original loader (exit 101). The accepted-resume test is an
+already-correct ownership control, not a newly fixed RED. All three named tests
+must stay green; do not claim three newly reproduced defects.
+
+The T-633 standalone harness is
+`storage/ublk-daemon/examples/socket_wait_probe.rs`. On the next authorized,
+isolated disposable node, after guests are preserved and the service and real
+daemon are stopped, run it with the real daemon binary/configs:
+
+```sh
+cargo run -p uvm-ublk-daemon --example socket_wait_probe --   --disposable-node-service-stopped   --binary /path/to/uvm-ublk-daemon --socket /path/to/daemon.sock   --global-config /path/to/global.json   --resize-global-config /path/to/resize.json --app-config /path/to/aenv.toml
+```
+
+It reports holder PID/inode, the unchanged 30s socket wait, then joins the holder
+and retries the real daemon with GetFeatures followed by shutdown. The harness
+has not been run on a privileged node in this cut. Its success would still need
+separate guest restore/fidelity and actual daemon-exit evidence. T-629 remains
+a rollout prerequisite; no whole-node <30s guarantee, automatic Resuming
+recovery, unit/package changes, or production rollout is claimed.
+
+Local validation: `cargo test --lib` passed 780 tests with four pre-existing
+privileged tests ignored; `cargo test --test http_shutdown` passed all nine;
+`cargo fmt --all --check` and workspace/all-target/all-feature clippy with
+`-D warnings` exited 0. No privileged test or disposable-node proof was run.
+The real held-heartbeat test also proves that the shutdown budget covers an
+in-flight telemetry RPC, not only a reporter timer.

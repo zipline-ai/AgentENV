@@ -276,8 +276,10 @@ impl SandboxPersister for FileBackedSandboxPersister {
             let sandbox_id = record.metadata.id;
 
             if record.lifecycle == PersistedPausedLifecycle::Resuming {
-                warn!(sandbox_id = %sandbox_id, "discarding paused sandbox record left in resuming state");
-                self.cleanup_invalid_record(&sandbox_id).await?;
+                // The prior resume may have started a VM. Keep its evidence and
+                // artifacts, but never publish it as safely resumable metadata.
+                retained_artifacts.insert(sandbox_id);
+                warn!(sandbox_id = %sandbox_id, recovery = "unresolved", "retaining resuming record and artifacts; exact-runtime reconciliation required");
                 continue;
             }
 
@@ -626,10 +628,11 @@ mod tests {
         Ok(())
     }
 
+    // zippy:guarded — unresolved resume is evidence, not an orphan or resumable guest.
     #[tokio::test]
-    async fn resuming_records_are_cleaned_on_load() -> anyhow::Result<()> {
+    async fn crash_resuming_record_and_artifacts_survive_repeated_load() -> anyhow::Result<()> {
         let temp = TempDir::new()?;
-        let persister = test_persister(temp.path());
+        let mut persister = FileBackedSandboxPersister::new_for_test(temp.path().to_path_buf());
         let sandbox_id = SandboxId::new();
         let snapshot_root = persister
             .sandbox_artifact_root(&sandbox_id)
@@ -646,11 +649,23 @@ mod tests {
             .await?;
         persister.mark_resuming(&metadata.id).await?;
 
-        let loaded = persister.load_all(&MockBackendFactory::new()).await?;
-
-        assert!(loaded.is_empty());
-        assert!(!has_record(&persister, &metadata.id).await?);
-        assert!(!persister.sandbox_artifact_root(&metadata.id).exists());
+        let key = metadata.id.to_string();
+        let before = persister.db().await?.get(key.as_bytes()).await?.unwrap();
+        let artifact = snapshot_root.join("guest-memory");
+        tokio::fs::write(&artifact, b"unresolved guest bytes").await?;
+        for _ in 0..3 {
+            drop(persister);
+            persister = FileBackedSandboxPersister::new_for_test(temp.path().to_path_buf());
+            // A decoder failure would discard the record: this also proves that
+            // unresolved state never reaches the backend decoder or metadata.
+            let loaded = persister.load_all(&RejectingFactory).await?;
+            assert!(loaded.is_empty());
+            assert_eq!(
+                persister.db().await?.get(key.as_bytes()).await?,
+                Some(before.clone())
+            );
+            assert_eq!(tokio::fs::read(&artifact).await?, b"unresolved guest bytes");
+        }
         Ok(())
     }
 

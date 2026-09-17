@@ -192,54 +192,65 @@ impl ObservabilityReporter {
     }
 
     pub async fn shutdown(&mut self) -> Result<()> {
+        self.shutdown_until(tokio::time::Instant::now() + super::shutdown::REPORTER_SHUTDOWN_BUDGET)
+            .await
+    }
+
+    /// Best-effort reporting only, never a placement fence. If unregister is
+    /// unknown, the scheduler marks observations UNHEALTHY after report_ttl
+    /// (default 30s); it does not delete assignments or exclude discovery.
+    /// The caller runs and joins the owned guest cleanup chain independently.
+    pub async fn shutdown_until(&mut self, deadline: tokio::time::Instant) -> Result<()> {
+        let started = tokio::time::Instant::now();
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(true);
         }
 
-        if let Some(join) = self.heartbeat_join.take() {
+        // Only telemetry tasks are cancelled, including their in-flight RPCs.
+        // Abort both before awaiting either, and join both before unregister so
+        // no local sender can later refresh a successfully removed observation.
+        let heartbeat = self.heartbeat_join.take();
+        let events = self.event_join.take();
+        for join in [&heartbeat, &events].into_iter().flatten() {
+            join.abort();
+        }
+        for join in [heartbeat, events].into_iter().flatten() {
             if let Err(err) = join.await {
-                warn!(error = %err, "observability heartbeat reporter task join failed");
+                if !err.is_cancelled() {
+                    warn!(error = %err, "observability reporter task join failed");
+                }
             }
         }
+        info!(
+            phase = "reporter_senders_joined",
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            remaining_tasks = 0,
+            "reporter-only senders cancelled and joined"
+        );
 
-        if let Some(join) = self.event_join.take() {
-            if let Err(err) = join.await {
-                warn!(error = %err, "observability sandbox event reporter task join failed");
-            }
-        }
-
-        // If we never succeeded in sending a heartbeat, it's likely the scheduler
-        // endpoint is misconfigured or the scheduler is unreachable. In that case,
-        // skip the UnregisterNode RPC.
         if !self.ever_heartbeat_succeeded.load(Ordering::Relaxed) {
             debug!("skipping node unregister: no heartbeat ever succeeded");
             return Ok(());
         }
-
-        for attempt in 1..=3 {
-            match self.unregister_node().await {
-                Ok(()) => {
-                    info!(
-                        node_id = %self.service.node_id(),
-                        service_instance_id = %self.service.service_instance_id(),
-                        attempt,
-                        "observability node unregistered from scheduler"
-                    );
-                    return Ok(());
-                }
-                Err(err) => {
-                    warn!(
-                        node_id = %self.service.node_id(),
-                        service_instance_id = %self.service.service_instance_id(),
-                        attempt,
-                        error = %err,
-                        "failed to unregister node from scheduler during shutdown"
-                    );
-                    sleep(Duration::from_millis(200 * attempt)).await;
-                }
-            }
+        // One attempt within the absolute signal budget. Do not start an RPC
+        // when it is already spent, and never retry an ambiguous result.
+        if tokio::time::Instant::now() >= deadline {
+            warn!(
+                outcome = "unknown",
+                "node unregister budget expired before dispatch"
+            );
+            return Ok(());
         }
-
+        match tokio::time::timeout_at(deadline, self.unregister_node()).await {
+            Ok(Ok(())) => info!(node_id = %self.service.node_id(), outcome = "completed",
+                elapsed_ms = started.elapsed().as_millis() as u64, "observability node unregistered from scheduler"),
+            Ok(Err(err)) => {
+                warn!(node_id = %self.service.node_id(), outcome = "unknown", error = %err,
+                elapsed_ms = started.elapsed().as_millis() as u64, "node unregister failed; abandoning best-effort reporting")
+            }
+            Err(_) => warn!(node_id = %self.service.node_id(), outcome = "unknown",
+                elapsed_ms = started.elapsed().as_millis() as u64, "node unregister budget expired; abandoning best-effort reporting"),
+        }
         Ok(())
     }
 
@@ -585,3 +596,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "reporter_shutdown_fixture.rs"]
+pub(crate) mod shutdown_fixture;
