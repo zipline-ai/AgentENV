@@ -5,3 +5,5 @@ pub mod key;
 pub mod kms;
 pub mod policy;
 pub mod wire;
+
+pub mod descriptor;

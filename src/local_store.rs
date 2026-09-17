@@ -76,6 +76,32 @@ impl std::fmt::Debug for LocalKvStore {
 }
 
 impl LocalKvStore {
+    /// Synchronous primitives for a caller-owned blocking operation that must
+    /// retain external exclusion until all database work and cleanup finish.
+    /// Existing async callers keep their original behavior.
+    pub(crate) fn open_blocking(
+        path: PathBuf,
+        durability: LocalStoreDurability,
+        create_if_missing: bool,
+    ) -> anyhow::Result<Self> {
+        let mut options = Options::default();
+        options.create_if_missing(create_if_missing);
+        options.set_error_if_exists(create_if_missing);
+        let db = DB::open(&options, path).context("open retained local store")?;
+        Ok(Self {
+            db: Arc::new(db),
+            durability,
+        })
+    }
+    pub(crate) fn get_blocking(&self, key: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
+        self.db.get(key).context("read retained local store")
+    }
+    pub(crate) fn put_blocking(&self, key: &[u8], value: &[u8]) -> anyhow::Result<()> {
+        self.db
+            .put_opt(key, value, &self.durability.write_options())
+            .context("write retained local store")
+    }
+
     /// Open or create a RocksDB database at `path`.
     ///
     /// The parent directory is created automatically. The database itself uses
