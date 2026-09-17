@@ -107,6 +107,7 @@ dependencies = [
  "chrono",
  "clap",
  "confique",
+ "crc32c",
  "custom_extension_client",
  "dashmap",
  "envd",

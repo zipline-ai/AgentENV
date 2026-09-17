@@ -30,3 +30,15 @@ ConsumeHTTPNoRetry volume::control::tests::consume_redirect_server_error_and_mal
 ConsumeHTTPWrongNode volume::control::tests::consume_wrong_node_or_incarnation_denied_before_network
 ConsumeHTTPConfiguration volume::control::tests::consume_configuration_requires_tls_identity_and_secret_safe_endpoint
 ConsumeHTTPLostResponse volume::control::tests::lost_consume_response_is_not_redispatched
+KeyLockedMapping volume::key::tests::key_mapping_is_locked_and_excluded_from_dumps
+KeyAllocationBounds volume::key::tests::key_mapping_rejects_empty_and_unbounded_allocations
+KeyLockFailure volume::key::tests::locking_failure_denies_before_secret_storage
+KeyWipe volume::key::tests::key_wipe_clears_entire_mapping_before_release
+KMSExactBinding volume::kms::tests::kms_exact_key_ciphertext_aad_and_crc_return_locked_xts_key
+KMSForeignBinding volume::kms::tests::kms_wrong_binding_denies_before_transport
+KMSInvalidReply volume::kms::tests::kms_bad_plaintext_crc_length_or_json_denies_without_retry
+KMSCancellationWipe volume::kms::tests::cancelled_kms_future_wipes_locked_response
+KMSFailureWipe volume::kms::tests::kms_allocation_and_failure_paths_wipe_every_buffer
+KMSStrictSecretParser volume::kms::tests::kms_response_scanner_rejects_ambiguous_encodings_without_owned_strings
+KMSExactEffectFence volume::kms::tests::kms_fence_before_or_during_reply_denies_and_wipes
+KMSLateResultFence volume::kms::tests::kms_observed_inflight_fence_discards_late_key
