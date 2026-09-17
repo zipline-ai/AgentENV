@@ -456,6 +456,7 @@ impl Harness {
         let expired = matches!(self.mode.as_str(), "pending" | "cleanup" | "lifecycle");
         let transport_outcome = if expired {
             let expiry = phase("http_drain_expired");
+            assert_eq!(expiry["interrupted_request_outcome"], "unknown");
             assert!(
                 expiry["elapsed_ms"].as_u64().unwrap() >= 100,
                 "drain ended before its configured budget"

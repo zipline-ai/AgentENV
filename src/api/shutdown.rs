@@ -170,6 +170,7 @@ pub async fn serve_with_shutdown(
         if outcome.is_err() {
             warn!(
                 phase = "http_drain_expired",
+                interrupted_request_outcome = "unknown",
                 elapsed_ms = started.elapsed().as_millis() as u64,
                 remaining_connections = connections.len(),
                 remaining_tasks = state.tasks.len(),
