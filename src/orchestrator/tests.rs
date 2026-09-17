@@ -4975,3 +4975,6 @@ async fn shutdown_reports_panicked_accepted_work_after_preserving_known_guests()
     assert_eq!(persister.calls().len(), 2);
     Ok(())
 }
+
+#[path = "shutdown_ordering_tests.rs"]
+mod shutdown_ordering_tests;

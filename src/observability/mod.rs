@@ -14,8 +14,9 @@ mod host;
 mod machine;
 mod model;
 pub mod prometheus;
-mod reporter;
+pub(crate) mod reporter;
 mod service;
+pub mod shutdown;
 
 pub use host::{DiskMetric, HostMetrics, HostMetricsCollector};
 pub use model::{MachineInfo, NodeMetricsSnapshot, NodeSnapshot};
