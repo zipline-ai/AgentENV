@@ -1,6 +1,6 @@
 # T-620: bound HTTP shutdown without truncating guest cleanup
 
-Plan for codex-7; no implementation or rollout yet. AgentENV fork base:
+Approved implementation scope; no production rollout in this PR. AgentENV fork base:
 `39bfa34` (origin/main); the inspected process-epoch branch has the same server
 shutdown sequence. Unit/package/log-pipeline changes remain separate.
 
@@ -30,8 +30,9 @@ whole-node bound. Reporter unregister alone can use 3×10 seconds plus backoff
 (`reporter.rs:219`); orchestrator retries/transitions are unbounded in aggregate
 (`service.rs:2360`, 60-second transition wait); ublk's five-second shutdown RPC
 acknowledges initiation, not daemon exit. Preserve these semantics/budgets.
-If real-guest cleanup misses 30 seconds or daemon completion is unproved, report
-a release blocker rather than shortening cleanup or claiming this cut solves it.
+The coordinator deferred the disposable KVM/ublk proof until a node is available.
+This cut does NOT prove the 30-second whole-node bound or daemon completion.
+Do not shorten guest cleanup or claim this cut solves that separate risk.
 
 **RED → GREEN evidence.** Subprocess test using the production coordinator and
 real SIGTERM: upstream sends headers/one frame, then holds its body pending;
@@ -40,10 +41,29 @@ and no surviving HTTP/upgraded tasks. It must fail on today's unbounded wait.
 Positive: release a finite response before the deadline and compare every byte.
 Barrier tests hold cleanup past HTTP expiry: process must not exit or cancel it;
 then release it and prove cleanup order/exactly-once under repeated signals.
-Retain existing pause/retry/persist shutdown tests. A disposable KVM/ublk node
-must prove running and already-paused guests retain restorable state, warm VMs
+Retain existing pause/retry/persist shutdown tests. The deferred disposable KVM/ublk test must prove running and already-paused guests retain restorable state, warm VMs
 and daemon finish before exit, and total time is below 30 seconds; no production
 experiment. Run focused tests, existing proxy/orchestrator tests, fmt/clippy and
 fork CI. Log structured phases: signal, admission_closed, http_drained or
 http_drain_expired, cleanup phase start/end/error, exit; include elapsed_ms and
 remaining connection counts. These are code logs, not logging configuration.
+
+
+## Implementation evidence
+
+The pending-body subprocess regression failed against the original unbounded
+Axum drain: `sigterm_cancels_a_pending_response_body_after_the_drain_budget`
+returned exit 101 because cleanup completed but the body was never dropped.
+The production coordinator now owns connection tasks and Hyper HTTP/2 executor
+work. Proxy upgrade callbacks acquire tracking before Axum detaches them; expiry
+cancels and joins both WebSocket directions. The five-second deadline cancels
+transport only. Orchestrator admission closes synchronously before reporter
+cleanup starts; existing cancellation-safe lifecycle tasks remain independent.
+The existing cleanup sequence is awaited and all phase failures are retained.
+
+The subprocess suite runs from `make test-unit`. It covers finite response bytes,
+HTTP/1 and HTTP/2 pending bodies, HTTP/2 pending handlers, held cleanup, repeated
+SIGTERM, keep-alive admission, accepted lifecycle work and cleanup failure.
+Separate library tests cover bidirectional upgraded transport teardown and the
+orchestrator admission/guest-preservation boundary. These are deterministic
+transport and mocked lifecycle proofs, not a real KVM/ublk preservation claim.

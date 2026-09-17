@@ -4769,3 +4769,45 @@ async fn fork_sandbox_register_failure_cleans_up_metrics() -> Result<()> {
     orchestrator.delete_sandbox(source.id).await?;
     Ok(())
 }
+
+// zippy:guarded — admission closes before a held reporter can delay cleanup.
+#[tokio::test]
+async fn close_admission_rejects_creation_before_cleanup_but_preserves_guests() -> Result<()> {
+    setup();
+    let persister = RecordingPersister::default();
+    let orchestrator = make_orchestrator_without_background_with_factory_and_persister(
+        InMemoryMetadataStore::new(),
+        MockBackendFactory::new(),
+        persister.clone(),
+    );
+    let existing = orchestrator
+        .create_sandbox(create_request(Some(60), &[]))
+        .await?;
+    orchestrator.close_admission();
+    orchestrator.close_admission();
+    let err = orchestrator
+        .create_sandbox(create_request(Some(60), &[]))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, OrchestratorError::ShuttingDown));
+    let before = orchestrator.list_sandboxes().await?;
+    assert_eq!(before.len(), 1);
+    assert_eq!(before[0].id, existing.id);
+    assert_eq!(before[0].state, SandboxState::Running);
+    assert!(persister.calls().is_empty());
+    orchestrator.shutdown().await?;
+    assert_eq!(
+        orchestrator.list_sandboxes().await?[0].state,
+        SandboxState::Paused
+    );
+    assert_eq!(
+        persister.calls(),
+        vec![
+            RecordingCall::AllocateArtifactRoot,
+            RecordingCall::PersistPaused
+        ]
+    );
+    orchestrator.shutdown().await?;
+    assert_eq!(persister.calls().len(), 2);
+    Ok(())
+}

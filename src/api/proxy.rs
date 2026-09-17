@@ -311,7 +311,13 @@ async fn proxy_request(
         };
 
     if is_websocket_request {
-        return proxy_websocket_request(websocket_upgrade, parts, resolved).await;
+        return proxy_websocket_request(
+            api_impl.http_shutdown_state(),
+            websocket_upgrade,
+            parts,
+            resolved,
+        )
+        .await;
     }
 
     proxy_http_request(api_impl, parts, body, resolved).await
@@ -591,6 +597,7 @@ fn is_send_request_failure_text(err: &impl std::fmt::Display) -> bool {
 /// Proxies a WebSocket upgrade request by performing the handshake with the upstream and then
 /// bridging the client and upstream WebSocket streams.
 async fn proxy_websocket_request(
+    shutdown: super::shutdown::ShutdownState,
     websocket_upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
     mut parts: http::request::Parts,
     resolved: ResolvedProxyRequest,
@@ -683,8 +690,16 @@ async fn proxy_websocket_request(
     remove_websocket_handshake_headers(&mut upstream_headers);
     remove_hop_by_hop_headers(&mut upstream_headers);
 
+    let upgrade_guard = shutdown.upgrade_guard();
     let mut response = websocket_upgrade.on_upgrade(move |socket| async move {
-        bridge_websocket_streams(socket, upstream_websocket, sandbox_id_for_bridge).await;
+        let _guard = upgrade_guard;
+        shutdown
+            .until_cancelled(bridge_websocket_streams(
+                socket,
+                upstream_websocket,
+                sandbox_id_for_bridge,
+            ))
+            .await;
     });
 
     // Axum's on_upgrade() produces a minimal 101 response with only the

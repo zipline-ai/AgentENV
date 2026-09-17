@@ -115,6 +115,7 @@ coverage:
 test: test-agent test-envd test-ublk
 
 test-unit:
+	$(CARGO) test -p agentenv --test http_shutdown
 	$(CARGO) test -p agentenv -p envd -p linux-cap --lib
 	$(CAPABILITY_TEST_ENV) $(CAPABILITY_RUNNER) $(CARGO) test -p agentenv --lib -- --ignored
 	$(CAPABILITY_TEST_ENV) $(CAPABILITY_RUNNER) $(CARGO) test -p uvm-ublk -p uvm-ublk-daemon --lib

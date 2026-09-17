@@ -35,6 +35,7 @@ pub struct ApiImpl {
     proxy_client: ProxyClient,
     sandbox_proxy_domains: Vec<String>,
     api_key: ApiKey,
+    http_shutdown: super::shutdown::ShutdownState,
 }
 
 impl ApiImpl {
@@ -56,7 +57,12 @@ impl ApiImpl {
             proxy_client: build_proxy_client(),
             sandbox_proxy_domains,
             api_key,
+            http_shutdown: super::shutdown::ShutdownState::default(),
         }
+    }
+
+    pub fn http_shutdown_state(&self) -> super::shutdown::ShutdownState {
+        self.http_shutdown.clone()
     }
 
     pub(crate) fn orchestrator(&self) -> Arc<Orchestrator> {

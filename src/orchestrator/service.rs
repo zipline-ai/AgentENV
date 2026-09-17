@@ -1023,12 +1023,7 @@ where
     /// error if any sandbox could not be cleaned up after several passes.
     #[tracing::instrument(skip(self))]
     pub async fn shutdown(self: &Arc<Self>) -> Result<()> {
-        let was_already_shutting_down = self.is_shutting_down.swap(true, Ordering::AcqRel);
-        let _ = self.shutdown_tx.send_replace(true);
-
-        if !was_already_shutting_down {
-            info!("orchestrator shutdown requested; stopping all sandboxes");
-        }
+        self.close_admission();
 
         let this = Arc::clone(self);
         let outcome = self
@@ -1039,6 +1034,17 @@ where
             .await;
 
         outcome.as_result()
+    }
+
+    /// Close lifecycle admission synchronously, before reporter cleanup can wait.
+    /// Accepted cancellation-safe operations remain owned by their existing tasks.
+    pub fn close_admission(&self) {
+        let was_already_shutting_down = self.is_shutting_down.swap(true, Ordering::AcqRel);
+        let _ = self.shutdown_tx.send_replace(true);
+
+        if !was_already_shutting_down {
+            info!("orchestrator shutdown requested; stopping all sandboxes");
+        }
     }
 
     /// Pauses a running sandbox by taking a snapshot and stopping its VM.
