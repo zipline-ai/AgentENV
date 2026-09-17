@@ -86,3 +86,6 @@ The captured allocation binding is [ADDENDUM-4.md](ADDENDUM-4.md).
 `dispatch_result_v2` response arm. V1 remains unchanged and cannot supply retirement
 allocation authority. Eighteen positives, five malformed records and three validly
 signed contextual-negative records cover the captured-allocation requirement.
+
+Addendum-4 content freeze: `31fda59274c115f1573600b6c713a6353378a49a`.
+This publication only records the content commit; fixture bytes are unchanged.
