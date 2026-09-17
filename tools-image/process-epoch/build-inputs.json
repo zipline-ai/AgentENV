@@ -1,0 +1,8 @@
+{
+  "format_version": 1,
+  "envd_repository": "https://github.com/e2b-dev/infra.git",
+  "envd_commit": "9c3b7c5dbd181ba819084276b8228f70936e911e",
+  "protocol": "agentenv-process-epoch-v1",
+  "managed_capability_advertised": false,
+  "patches": []
+}

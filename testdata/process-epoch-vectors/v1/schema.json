@@ -1,0 +1,1727 @@
+{
+  "format_version": 1,
+  "enums": {
+    "protocol": [
+      "agentenv-process-epoch-v1"
+    ],
+    "family": [
+      "legacy",
+      "native"
+    ],
+    "dispatch_kind": [
+      "create",
+      "wake",
+      "restore"
+    ],
+    "initial_kind": [
+      "initial_creation"
+    ],
+    "transition_kind": [
+      "epoch_transition"
+    ],
+    "evidence": [
+      "host_dispatch_recorded",
+      "guest_reported",
+      "host_scope_stopped"
+    ],
+    "seal_state": [
+      "sealed",
+      "incomplete"
+    ],
+    "execution_outcome": [
+      "drained",
+      "scope_retired",
+      "unknown"
+    ],
+    "bind_kind": [
+      "initial",
+      "transition"
+    ],
+    "bind_state": [
+      "bound_closed",
+      "incomplete"
+    ],
+    "lookup_state": [
+      "closing",
+      "execution_claimed",
+      "effect_unknown",
+      "completed",
+      "bound_closed",
+      "incomplete",
+      "claimed",
+      "completed_seal",
+      "bind_pending",
+      "bound",
+      "release_pending",
+      "released",
+      "unknown",
+      "dispatch_completed",
+      "retired"
+    ],
+    "direction": [
+      "stdin",
+      "pty-input",
+      "output-only"
+    ],
+    "guest_class": [
+      "guest_reported"
+    ],
+    "guest_outcome": [
+      "incomplete",
+      "reported_complete"
+    ],
+    "domain": [
+      "agentenv-process-epoch/descriptor/v1",
+      "agentenv-process-epoch/seal/v1",
+      "agentenv-process-epoch/bind/v1",
+      "agentenv-process-epoch/lookup/v1",
+      "agentenv-process-epoch/initializer/v1",
+      "agentenv-process-epoch/mutation/v1",
+      "agentenv-process-epoch/stream-open/v1",
+      "agentenv-process-epoch/frame/v1",
+      "agentenv-process-epoch/guest-receipt/v1",
+      "agentenv-process-epoch/node-response/v1",
+      "agentenv-process-epoch/release/v1",
+      "agentenv-process-epoch/retire/v1"
+    ],
+    "release_outcome": [
+      "accepted",
+      "incomplete",
+      "released"
+    ],
+    "receipt_kind": [
+      "seal",
+      "bind",
+      "release",
+      "dispatch_result",
+      "host_cessation",
+      "dispatch_result_v2"
+    ],
+    "result_dispatch_kind": [
+      "create",
+      "restore"
+    ],
+    "dispatch_outcome": [
+      "running",
+      "failed",
+      "unknown"
+    ],
+    "retirement_reason": [
+      "policy_idle",
+      "policy_exhausted",
+      "owner_delete",
+      "epoch_seal_retire"
+    ],
+    "dispatch_result_protocol_v2": [
+      "agentenv-process-epoch-dispatch-result-v2"
+    ]
+  },
+  "types": {
+    "Descriptor": [
+      {
+        "name": "protocol",
+        "type": "protocol"
+      },
+      {
+        "name": "node_id",
+        "type": "text"
+      },
+      {
+        "name": "node_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "guest_boot_id",
+        "type": "uuid"
+      },
+      {
+        "name": "enrollment_revision",
+        "type": "positive"
+      },
+      {
+        "name": "process_endpoint",
+        "type": "text"
+      },
+      {
+        "name": "guest_build_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "capabilities_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "managed",
+        "type": "true"
+      }
+    ],
+    "EpochBinding": [
+      {
+        "name": "protocol",
+        "type": "protocol"
+      },
+      {
+        "name": "tenant_id",
+        "type": "text"
+      },
+      {
+        "name": "sandbox_family",
+        "type": "family"
+      },
+      {
+        "name": "sandbox_id",
+        "type": "text"
+      },
+      {
+        "name": "transition_id",
+        "type": "uuid"
+      },
+      {
+        "name": "launch_id",
+        "type": "uuid?"
+      },
+      {
+        "name": "operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "reserved_session_id",
+        "type": "uuid"
+      },
+      {
+        "name": "descriptor_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "node_id",
+        "type": "text"
+      },
+      {
+        "name": "node_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "guest_boot_id",
+        "type": "uuid"
+      },
+      {
+        "name": "enrollment_revision",
+        "type": "positive"
+      },
+      {
+        "name": "process_endpoint",
+        "type": "text"
+      },
+      {
+        "name": "guest_build_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "capabilities_sha256",
+        "type": "hash"
+      }
+    ],
+    "SavedDispatchProof": [
+      {
+        "name": "dispatch_id",
+        "type": "uuid"
+      },
+      {
+        "name": "dispatch_request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "dispatch_kind",
+        "type": "dispatch_kind"
+      },
+      {
+        "name": "creation_or_transition_id",
+        "type": "uuid"
+      },
+      {
+        "name": "launch_id",
+        "type": "uuid?"
+      },
+      {
+        "name": "reserved_session_id",
+        "type": "uuid"
+      },
+      {
+        "name": "authority_revision",
+        "type": "positive"
+      },
+      {
+        "name": "exact_result_id",
+        "type": "uuid"
+      },
+      {
+        "name": "exact_result_sha256",
+        "type": "hash"
+      }
+    ],
+    "InitialAuthority": [
+      {
+        "name": "creation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "owner_user_id",
+        "type": "text"
+      },
+      {
+        "name": "creation_generation",
+        "type": "positive"
+      },
+      {
+        "name": "provider_operation_key",
+        "type": "text"
+      },
+      {
+        "name": "provider_request_sha256",
+        "type": "hash"
+      }
+    ],
+    "RestoreBridge": [
+      {
+        "name": "predecessor_descriptor_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "predecessor_runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "predecessor_runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "predecessor_guest_boot_id",
+        "type": "uuid"
+      },
+      {
+        "name": "predecessor_enrollment_revision",
+        "type": "positive"
+      },
+      {
+        "name": "expected_session_id",
+        "type": "uuid"
+      },
+      {
+        "name": "seal_operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "seal_request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "seal_receipt_id",
+        "type": "uuid"
+      },
+      {
+        "name": "seal_receipt_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "sealed_inventory_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "restore_launch_id",
+        "type": "uuid"
+      },
+      {
+        "name": "restore_request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "restore_result_id",
+        "type": "uuid"
+      },
+      {
+        "name": "restore_result_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "destination_descriptor_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "destination_runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "destination_runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "destination_guest_boot_id",
+        "type": "uuid"
+      },
+      {
+        "name": "destination_enrollment_revision",
+        "type": "positive"
+      },
+      {
+        "name": "reserved_session_id",
+        "type": "uuid"
+      }
+    ],
+    "InitialBindRequest": [
+      {
+        "name": "authority_kind",
+        "type": "initial_kind"
+      },
+      {
+        "name": "binding",
+        "type": "EpochBinding"
+      },
+      {
+        "name": "saved_dispatch",
+        "type": "SavedDispatchProof"
+      },
+      {
+        "name": "initial_authority",
+        "type": "InitialAuthority"
+      },
+      {
+        "name": "adoption_id",
+        "type": "uuid"
+      },
+      {
+        "name": "adoption_revision",
+        "type": "positive"
+      },
+      {
+        "name": "adoption_sha256",
+        "type": "hash"
+      }
+    ],
+    "TransitionBindRequest": [
+      {
+        "name": "authority_kind",
+        "type": "transition_kind"
+      },
+      {
+        "name": "binding",
+        "type": "EpochBinding"
+      },
+      {
+        "name": "saved_dispatch",
+        "type": "SavedDispatchProof"
+      },
+      {
+        "name": "expected_session_id",
+        "type": "uuid"
+      },
+      {
+        "name": "seal_operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "seal_request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "seal_receipt_id",
+        "type": "uuid"
+      },
+      {
+        "name": "seal_receipt_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "sealed_inventory_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "prior_enrollment_revision",
+        "type": "positive"
+      },
+      {
+        "name": "restore_bridge",
+        "type": "RestoreBridge?"
+      }
+    ],
+    "SealRequest": [
+      {
+        "name": "binding",
+        "type": "EpochBinding"
+      },
+      {
+        "name": "expected_session_id",
+        "type": "uuid"
+      },
+      {
+        "name": "retirement_authority_id",
+        "type": "uuid?"
+      },
+      {
+        "name": "retirement_authority_sha256",
+        "type": "hash?"
+      }
+    ],
+    "EvidenceReference": [
+      {
+        "name": "evidence_class",
+        "type": "evidence"
+      },
+      {
+        "name": "evidence_id",
+        "type": "uuid"
+      },
+      {
+        "name": "evidence_sha256",
+        "type": "hash"
+      }
+    ],
+    "SealReceipt": [
+      {
+        "name": "request",
+        "type": "SealRequest"
+      },
+      {
+        "name": "request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "receipt_id",
+        "type": "uuid"
+      },
+      {
+        "name": "state",
+        "type": "seal_state"
+      },
+      {
+        "name": "execution_outcome",
+        "type": "execution_outcome"
+      },
+      {
+        "name": "affected_operations_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "evidence",
+        "type": "EvidenceReference"
+      }
+    ],
+    "BindReceipt": [
+      {
+        "name": "binding",
+        "type": "EpochBinding"
+      },
+      {
+        "name": "request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "receipt_id",
+        "type": "uuid"
+      },
+      {
+        "name": "kind",
+        "type": "bind_kind"
+      },
+      {
+        "name": "state",
+        "type": "bind_state"
+      },
+      {
+        "name": "expected_session_id",
+        "type": "uuid?"
+      },
+      {
+        "name": "seal_receipt_id",
+        "type": "uuid?"
+      },
+      {
+        "name": "seal_receipt_sha256",
+        "type": "hash?"
+      },
+      {
+        "name": "adoption_sha256",
+        "type": "hash?"
+      },
+      {
+        "name": "node_ledger_revision",
+        "type": "positive"
+      },
+      {
+        "name": "guest_journal_revision",
+        "type": "uint"
+      },
+      {
+        "name": "evidence",
+        "type": "EvidenceReference"
+      }
+    ],
+    "LookupRequest": [
+      {
+        "name": "binding",
+        "type": "EpochBinding"
+      },
+      {
+        "name": "saved_request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "nonce",
+        "type": "hash"
+      }
+    ],
+    "LookupResponse": [
+      {
+        "name": "binding",
+        "type": "EpochBinding"
+      },
+      {
+        "name": "request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "state",
+        "type": "lookup_state"
+      },
+      {
+        "name": "node_ledger_revision",
+        "type": "positive"
+      },
+      {
+        "name": "receipt_id",
+        "type": "uuid?"
+      },
+      {
+        "name": "receipt_sha256",
+        "type": "hash?"
+      },
+      {
+        "name": "evidence",
+        "type": "EvidenceReference?"
+      },
+      {
+        "name": "receipt_kind",
+        "type": "receipt_kind?"
+      },
+      {
+        "name": "affected_operations_sha256",
+        "type": "hash?"
+      }
+    ],
+    "StreamBinding": [
+      {
+        "name": "binding",
+        "type": "EpochBinding"
+      },
+      {
+        "name": "stream_id",
+        "type": "uuid"
+      },
+      {
+        "name": "process_operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "terminal_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "direction",
+        "type": "direction"
+      },
+      {
+        "name": "authority_id",
+        "type": "uuid"
+      },
+      {
+        "name": "authority_sha256",
+        "type": "hash"
+      }
+    ],
+    "StreamOpenRequest": [
+      {
+        "name": "stream",
+        "type": "StreamBinding"
+      }
+    ],
+    "FrameRequest": [
+      {
+        "name": "stream",
+        "type": "StreamBinding"
+      },
+      {
+        "name": "sequence",
+        "type": "positive"
+      },
+      {
+        "name": "mutation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "payload_length",
+        "type": "uint"
+      },
+      {
+        "name": "payload_sha256",
+        "type": "hash"
+      }
+    ],
+    "GuestReceipt": [
+      {
+        "name": "binding",
+        "type": "EpochBinding"
+      },
+      {
+        "name": "request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "receipt_id",
+        "type": "uuid"
+      },
+      {
+        "name": "evidence_class",
+        "type": "guest_class"
+      },
+      {
+        "name": "outcome",
+        "type": "guest_outcome"
+      },
+      {
+        "name": "guest_journal_revision",
+        "type": "uint"
+      }
+    ],
+    "NodeResponse": [
+      {
+        "name": "binding",
+        "type": "EpochBinding"
+      },
+      {
+        "name": "request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "nonce",
+        "type": "hash"
+      },
+      {
+        "name": "node_ledger_revision",
+        "type": "positive"
+      },
+      {
+        "name": "evidence",
+        "type": "EvidenceReference"
+      },
+      {
+        "name": "guest_receipt_sha256",
+        "type": "hash?"
+      }
+    ],
+    "ReleaseRequest": [
+      {
+        "name": "binding",
+        "type": "EpochBinding"
+      },
+      {
+        "name": "bind_receipt_id",
+        "type": "uuid"
+      },
+      {
+        "name": "bind_receipt_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "installed_session_id",
+        "type": "uuid"
+      },
+      {
+        "name": "installation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "installation_revision",
+        "type": "positive"
+      },
+      {
+        "name": "installation_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "access_grant_id",
+        "type": "uuid"
+      },
+      {
+        "name": "access_grant_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "publication_revision",
+        "type": "positive"
+      },
+      {
+        "name": "access_grant_revision",
+        "type": "positive"
+      },
+      {
+        "name": "release_revision",
+        "type": "positive"
+      },
+      {
+        "name": "expected_provider_revision",
+        "type": "positive"
+      },
+      {
+        "name": "lease_not_after_unix_ms",
+        "type": "positive"
+      }
+    ],
+    "SignedEnvelope": [
+      {
+        "name": "protocol",
+        "type": "protocol"
+      },
+      {
+        "name": "domain",
+        "type": "domain"
+      },
+      {
+        "name": "signer",
+        "type": "text"
+      },
+      {
+        "name": "key_id",
+        "type": "text"
+      },
+      {
+        "name": "trust_revision",
+        "type": "positive"
+      },
+      {
+        "name": "audience",
+        "type": "text"
+      },
+      {
+        "name": "node_id",
+        "type": "text"
+      },
+      {
+        "name": "node_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "enrollment_revision",
+        "type": "positive"
+      },
+      {
+        "name": "descriptor_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "nonce",
+        "type": "hash"
+      },
+      {
+        "name": "expires_at_unix_ms",
+        "type": "positive"
+      },
+      {
+        "name": "body_sha256",
+        "type": "hash"
+      }
+    ],
+    "ReleaseReceipt": [
+      {
+        "name": "request",
+        "type": "ReleaseRequest"
+      },
+      {
+        "name": "request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "receipt_id",
+        "type": "uuid"
+      },
+      {
+        "name": "outcome",
+        "type": "release_outcome"
+      },
+      {
+        "name": "node_ledger_revision",
+        "type": "positive"
+      },
+      {
+        "name": "obligations_retained",
+        "type": "true"
+      }
+    ],
+    "SignedRecord": [
+      {
+        "name": "body",
+        "type": "octets"
+      },
+      {
+        "name": "envelope",
+        "type": "octets"
+      },
+      {
+        "name": "signature",
+        "type": "octets"
+      }
+    ],
+    "ReceiptResponse": [
+      {
+        "name": "node",
+        "type": "SignedRecord"
+      },
+      {
+        "name": "guest",
+        "type": "SignedRecord?"
+      },
+      {
+        "name": "receipt",
+        "type": "SignedRecord?"
+      }
+    ],
+    "DispatchResult": [
+      {
+        "name": "protocol",
+        "type": "protocol"
+      },
+      {
+        "name": "dispatch_kind",
+        "type": "result_dispatch_kind"
+      },
+      {
+        "name": "operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "dispatch_request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "node_id",
+        "type": "text"
+      },
+      {
+        "name": "node_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "guest_boot_id",
+        "type": "uuid"
+      },
+      {
+        "name": "process_endpoint",
+        "type": "text"
+      },
+      {
+        "name": "guest_build_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "enrollment_revision",
+        "type": "positive"
+      },
+      {
+        "name": "node_ledger_revision",
+        "type": "positive"
+      },
+      {
+        "name": "outcome",
+        "type": "dispatch_outcome"
+      },
+      {
+        "name": "node_observed_at",
+        "type": "positive"
+      }
+    ],
+    "AffectedSealReceipt": [
+      {
+        "name": "operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "envelope_sha256",
+        "type": "hash"
+      }
+    ],
+    "RetirementAuthority": [
+      {
+        "name": "protocol",
+        "type": "protocol"
+      },
+      {
+        "name": "operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "tenant_id",
+        "type": "text"
+      },
+      {
+        "name": "sandbox_family",
+        "type": "family"
+      },
+      {
+        "name": "sandbox_id",
+        "type": "text"
+      },
+      {
+        "name": "transition_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "enrollment_revision",
+        "type": "positive"
+      },
+      {
+        "name": "expected_session_id",
+        "type": "uuid"
+      },
+      {
+        "name": "reason",
+        "type": "retirement_reason"
+      },
+      {
+        "name": "affected_seal_receipt",
+        "type": "AffectedSealReceipt?"
+      },
+      {
+        "name": "issued_at",
+        "type": "positive"
+      },
+      {
+        "name": "expires_at",
+        "type": "positive"
+      }
+    ],
+    "HostCessationEvidence": [
+      {
+        "name": "retirement_operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "retirement_request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "host_allocation_id",
+        "type": "text"
+      },
+      {
+        "name": "cessation_method",
+        "type": "text"
+      },
+      {
+        "name": "host_observed_at",
+        "type": "positive"
+      },
+      {
+        "name": "no_second_copy",
+        "type": "true"
+      },
+      {
+        "name": "node_ledger_revision",
+        "type": "positive"
+      }
+    ],
+    "DispatchResultV2": [
+      {
+        "name": "protocol",
+        "type": "dispatch_result_protocol_v2"
+      },
+      {
+        "name": "dispatch_kind",
+        "type": "result_dispatch_kind"
+      },
+      {
+        "name": "operation_id",
+        "type": "uuid"
+      },
+      {
+        "name": "dispatch_request_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "node_id",
+        "type": "text"
+      },
+      {
+        "name": "node_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_id",
+        "type": "uuid"
+      },
+      {
+        "name": "runtime_incarnation",
+        "type": "uuid"
+      },
+      {
+        "name": "host_allocation_id",
+        "type": "text"
+      },
+      {
+        "name": "guest_boot_id",
+        "type": "uuid"
+      },
+      {
+        "name": "process_endpoint",
+        "type": "text"
+      },
+      {
+        "name": "guest_build_sha256",
+        "type": "hash"
+      },
+      {
+        "name": "enrollment_revision",
+        "type": "positive"
+      },
+      {
+        "name": "node_ledger_revision",
+        "type": "positive"
+      },
+      {
+        "name": "outcome",
+        "type": "dispatch_outcome"
+      },
+      {
+        "name": "node_observed_at",
+        "type": "positive"
+      }
+    ]
+  },
+  "rules": {
+    "InitialBindRequest": [
+      {
+        "equal": [
+          "binding.transition_id",
+          "saved_dispatch.creation_or_transition_id"
+        ]
+      },
+      {
+        "equal": [
+          "binding.reserved_session_id",
+          "saved_dispatch.reserved_session_id"
+        ]
+      },
+      {
+        "absent": "binding.launch_id"
+      },
+      {
+        "absent": "saved_dispatch.launch_id"
+      },
+      {
+        "equal": [
+          "binding.transition_id",
+          "initial_authority.creation_id"
+        ]
+      },
+      {
+        "equal": [
+          "saved_dispatch.dispatch_request_sha256",
+          "initial_authority.provider_request_sha256"
+        ]
+      },
+      {
+        "value": [
+          "saved_dispatch.dispatch_kind",
+          "create"
+        ]
+      }
+    ],
+    "TransitionBindRequest": [
+      {
+        "equal": [
+          "binding.transition_id",
+          "saved_dispatch.creation_or_transition_id"
+        ]
+      },
+      {
+        "equal": [
+          "binding.reserved_session_id",
+          "saved_dispatch.reserved_session_id"
+        ]
+      },
+      {
+        "present": "binding.launch_id"
+      },
+      {
+        "present": "saved_dispatch.launch_id"
+      },
+      {
+        "equal": [
+          "binding.launch_id",
+          "saved_dispatch.launch_id"
+        ]
+      },
+      {
+        "one_of": [
+          "saved_dispatch.dispatch_kind",
+          [
+            "wake",
+            "restore"
+          ]
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "present": "restore_bridge"
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "wake"
+        ],
+        "absent": "restore_bridge"
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.restore_launch_id",
+          "binding.launch_id"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.expected_session_id",
+          "expected_session_id"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.reserved_session_id",
+          "binding.reserved_session_id"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.seal_operation_id",
+          "seal_operation_id"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.seal_request_sha256",
+          "seal_request_sha256"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.seal_receipt_id",
+          "seal_receipt_id"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.seal_receipt_sha256",
+          "seal_receipt_sha256"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.sealed_inventory_sha256",
+          "sealed_inventory_sha256"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.predecessor_enrollment_revision",
+          "prior_enrollment_revision"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.restore_request_sha256",
+          "saved_dispatch.dispatch_request_sha256"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.restore_result_id",
+          "saved_dispatch.exact_result_id"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.restore_result_sha256",
+          "saved_dispatch.exact_result_sha256"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.destination_descriptor_sha256",
+          "binding.descriptor_sha256"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.destination_runtime_id",
+          "binding.runtime_id"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.destination_runtime_incarnation",
+          "binding.runtime_incarnation"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.destination_guest_boot_id",
+          "binding.guest_boot_id"
+        ]
+      },
+      {
+        "when": [
+          "saved_dispatch.dispatch_kind",
+          "restore"
+        ],
+        "equal": [
+          "restore_bridge.destination_enrollment_revision",
+          "binding.enrollment_revision"
+        ]
+      }
+    ],
+    "SealRequest": [
+      {
+        "present": "binding.launch_id"
+      },
+      {
+        "paired": [
+          "retirement_authority_id",
+          "retirement_authority_sha256"
+        ]
+      }
+    ],
+    "SealReceipt": [
+      {
+        "when": [
+          "state",
+          "sealed"
+        ],
+        "value": [
+          "execution_outcome",
+          "scope_retired"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "sealed"
+        ],
+        "value": [
+          "evidence.evidence_class",
+          "host_scope_stopped"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "sealed"
+        ],
+        "present": "request.retirement_authority_id"
+      },
+      {
+        "when": [
+          "state",
+          "incomplete"
+        ],
+        "value": [
+          "execution_outcome",
+          "unknown"
+        ]
+      }
+    ],
+    "BindReceipt": [
+      {
+        "when": [
+          "kind",
+          "initial"
+        ],
+        "absent": "expected_session_id"
+      },
+      {
+        "when": [
+          "kind",
+          "transition"
+        ],
+        "present": "expected_session_id"
+      },
+      {
+        "when": [
+          "kind",
+          "initial"
+        ],
+        "absent": "seal_receipt_sha256"
+      },
+      {
+        "when": [
+          "kind",
+          "transition"
+        ],
+        "present": "seal_receipt_sha256"
+      },
+      {
+        "when": [
+          "kind",
+          "initial"
+        ],
+        "present": "adoption_sha256"
+      },
+      {
+        "when": [
+          "kind",
+          "transition"
+        ],
+        "absent": "adoption_sha256"
+      },
+      {
+        "when": [
+          "kind",
+          "initial"
+        ],
+        "absent": "binding.launch_id"
+      },
+      {
+        "when": [
+          "kind",
+          "transition"
+        ],
+        "present": "binding.launch_id"
+      },
+      {
+        "when": [
+          "kind",
+          "transition"
+        ],
+        "present": "seal_receipt_id"
+      },
+      {
+        "when": [
+          "kind",
+          "initial"
+        ],
+        "absent": "seal_receipt_id"
+      }
+    ],
+    "LookupResponse": [
+      {
+        "paired": [
+          "receipt_id",
+          "receipt_sha256"
+        ]
+      },
+      {
+        "paired": [
+          "receipt_kind",
+          "receipt_id"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "completed_seal"
+        ],
+        "present": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "completed_seal"
+        ],
+        "value": [
+          "receipt_kind",
+          "seal"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "bound"
+        ],
+        "present": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "bound"
+        ],
+        "value": [
+          "receipt_kind",
+          "bind"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "released"
+        ],
+        "present": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "released"
+        ],
+        "value": [
+          "receipt_kind",
+          "release"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "claimed"
+        ],
+        "absent": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "closing"
+        ],
+        "absent": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "unknown"
+        ],
+        "absent": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "closing"
+        ],
+        "present": "affected_operations_sha256"
+      },
+      {
+        "when": [
+          "state",
+          "completed_seal"
+        ],
+        "present": "affected_operations_sha256"
+      },
+      {
+        "when": [
+          "state",
+          "bind_pending"
+        ],
+        "when_present": "receipt_id",
+        "value": [
+          "receipt_kind",
+          "bind"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "release_pending"
+        ],
+        "when_present": "receipt_id",
+        "value": [
+          "receipt_kind",
+          "release"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "dispatch_completed"
+        ],
+        "present": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "dispatch_completed"
+        ],
+        "one_of": [
+          "receipt_kind",
+          [
+            "dispatch_result",
+            "dispatch_result_v2"
+          ]
+        ]
+      },
+      {
+        "when": [
+          "receipt_kind",
+          "dispatch_result"
+        ],
+        "value": [
+          "state",
+          "dispatch_completed"
+        ]
+      },
+      {
+        "when": [
+          "state",
+          "retired"
+        ],
+        "present": "receipt_id"
+      },
+      {
+        "when": [
+          "state",
+          "retired"
+        ],
+        "value": [
+          "receipt_kind",
+          "host_cessation"
+        ]
+      },
+      {
+        "when": [
+          "receipt_kind",
+          "host_cessation"
+        ],
+        "value": [
+          "state",
+          "retired"
+        ]
+      },
+      {
+        "when": [
+          "receipt_kind",
+          "dispatch_result_v2"
+        ],
+        "value": [
+          "state",
+          "dispatch_completed"
+        ]
+      }
+    ],
+    "ReleaseRequest": [
+      {
+        "equal": [
+          "installed_session_id",
+          "binding.reserved_session_id"
+        ]
+      }
+    ]
+  }
+}

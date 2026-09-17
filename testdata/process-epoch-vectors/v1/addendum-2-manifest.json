@@ -1,0 +1,19 @@
+{
+  "positive": [
+    "Addendum2DispatchCreateRunning.json",
+    "Addendum2DispatchCreateFailed.json",
+    "Addendum2DispatchCreateUnknown.json",
+    "Addendum2DispatchRestoreRunning.json",
+    "Addendum2DispatchRestoreFailed.json",
+    "Addendum2DispatchRestoreUnknown.json",
+    "Addendum2Retirement.json",
+    "Addendum2RetirementAffectedSeal.json",
+    "Addendum2HostCessation.json"
+  ],
+  "negative": "negative-addendum-2.json",
+  "context_negative": [
+    "Addendum2WrongIncarnation.json",
+    "Addendum2GuestImpostor.json"
+  ],
+  "test_only_ed25519_seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+}

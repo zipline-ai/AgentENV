@@ -1,0 +1,226 @@
+{
+  "positive": [
+    "Addendum4DispatchCreateRunning.json",
+    "Addendum4DispatchCreateRunningLookup.json",
+    "Addendum4DispatchCreateRunningResponse.json",
+    "Addendum4DispatchCreateFailed.json",
+    "Addendum4DispatchCreateFailedLookup.json",
+    "Addendum4DispatchCreateFailedResponse.json",
+    "Addendum4DispatchCreateUnknown.json",
+    "Addendum4DispatchCreateUnknownLookup.json",
+    "Addendum4DispatchCreateUnknownResponse.json",
+    "Addendum4DispatchRestoreRunning.json",
+    "Addendum4DispatchRestoreRunningLookup.json",
+    "Addendum4DispatchRestoreRunningResponse.json",
+    "Addendum4DispatchRestoreFailed.json",
+    "Addendum4DispatchRestoreFailedLookup.json",
+    "Addendum4DispatchRestoreFailedResponse.json",
+    "Addendum4DispatchRestoreUnknown.json",
+    "Addendum4DispatchRestoreUnknownLookup.json",
+    "Addendum4DispatchRestoreUnknownResponse.json"
+  ],
+  "negative": "negative-addendum-4.json",
+  "contexts": [
+    {
+      "name": "Addendum4DispatchCreateRunningResponse.json",
+      "source": "Addendum4DispatchCreateRunning.json",
+      "binding": {
+        "protocol": "agentenv-process-epoch-v1",
+        "tenant_id": "fixture-tenant_id",
+        "sandbox_family": "legacy",
+        "sandbox_id": "fixture-sandbox_id",
+        "transition_id": "0c3bd738-12e4-5d09-8741-a08fc0d6551d",
+        "operation_id": "94643c08-3c21-532b-85d8-951dc48e0ec1",
+        "reserved_session_id": "2972dc5a-24bd-54fb-bdb4-16385c09aeb9",
+        "descriptor_sha256": "c6c9df73a3da259c929fe70d3f00bcf10a0252e0dc3603b2da4b1316047f58b8",
+        "node_id": "fixture-node_id",
+        "node_incarnation": "9e687121-ee3e-5f10-97eb-0fec582104f3",
+        "runtime_id": "9c98052b-f428-5c95-bca4-d29696804a3d",
+        "runtime_incarnation": "a0518879-6c5f-5d5a-a462-a20a4a70962b",
+        "guest_boot_id": "454fd0a6-7291-585e-bf9c-d87f93029130",
+        "enrollment_revision": 7,
+        "process_endpoint": "https://fixture.invalid:443",
+        "guest_build_sha256": "44575cf5b28512d75644bf54a517dcef304ff809fd511747621b4d64f19aac66",
+        "capabilities_sha256": "8999ff4b6f811ddd8c2dfd6e9029c6a9639a7dd14f4915db1fc4053f2d8d7380"
+      },
+      "request_sha256": "d1a55ed8f959ea39fe114cc7f4972fdf4e9fde2fe00e353c56781d7a5ca3c1ce",
+      "nonce": "986894ea0b026176156adac118f71d4ab40c39e0c074c703b0f787c769b85f7f",
+      "receipt_kind": "dispatch_result_v2",
+      "state": "dispatch_completed",
+      "accepted": true
+    },
+    {
+      "name": "Addendum4DispatchCreateFailedResponse.json",
+      "source": "Addendum4DispatchCreateFailed.json",
+      "binding": {
+        "protocol": "agentenv-process-epoch-v1",
+        "tenant_id": "fixture-tenant_id",
+        "sandbox_family": "legacy",
+        "sandbox_id": "fixture-sandbox_id",
+        "transition_id": "0c3bd738-12e4-5d09-8741-a08fc0d6551d",
+        "operation_id": "94643c08-3c21-532b-85d8-951dc48e0ec1",
+        "reserved_session_id": "2972dc5a-24bd-54fb-bdb4-16385c09aeb9",
+        "descriptor_sha256": "c6c9df73a3da259c929fe70d3f00bcf10a0252e0dc3603b2da4b1316047f58b8",
+        "node_id": "fixture-node_id",
+        "node_incarnation": "9e687121-ee3e-5f10-97eb-0fec582104f3",
+        "runtime_id": "9c98052b-f428-5c95-bca4-d29696804a3d",
+        "runtime_incarnation": "a0518879-6c5f-5d5a-a462-a20a4a70962b",
+        "guest_boot_id": "454fd0a6-7291-585e-bf9c-d87f93029130",
+        "enrollment_revision": 7,
+        "process_endpoint": "https://fixture.invalid:443",
+        "guest_build_sha256": "44575cf5b28512d75644bf54a517dcef304ff809fd511747621b4d64f19aac66",
+        "capabilities_sha256": "8999ff4b6f811ddd8c2dfd6e9029c6a9639a7dd14f4915db1fc4053f2d8d7380"
+      },
+      "request_sha256": "d1a55ed8f959ea39fe114cc7f4972fdf4e9fde2fe00e353c56781d7a5ca3c1ce",
+      "nonce": "40d73693a62366e3d6efc4958d1f60f4623b20e35d7815d2e31b8e76f2f1b0ba",
+      "receipt_kind": "dispatch_result_v2",
+      "state": "dispatch_completed",
+      "accepted": true
+    },
+    {
+      "name": "Addendum4DispatchCreateUnknownResponse.json",
+      "source": "Addendum4DispatchCreateUnknown.json",
+      "binding": {
+        "protocol": "agentenv-process-epoch-v1",
+        "tenant_id": "fixture-tenant_id",
+        "sandbox_family": "legacy",
+        "sandbox_id": "fixture-sandbox_id",
+        "transition_id": "0c3bd738-12e4-5d09-8741-a08fc0d6551d",
+        "operation_id": "94643c08-3c21-532b-85d8-951dc48e0ec1",
+        "reserved_session_id": "2972dc5a-24bd-54fb-bdb4-16385c09aeb9",
+        "descriptor_sha256": "c6c9df73a3da259c929fe70d3f00bcf10a0252e0dc3603b2da4b1316047f58b8",
+        "node_id": "fixture-node_id",
+        "node_incarnation": "9e687121-ee3e-5f10-97eb-0fec582104f3",
+        "runtime_id": "9c98052b-f428-5c95-bca4-d29696804a3d",
+        "runtime_incarnation": "a0518879-6c5f-5d5a-a462-a20a4a70962b",
+        "guest_boot_id": "454fd0a6-7291-585e-bf9c-d87f93029130",
+        "enrollment_revision": 7,
+        "process_endpoint": "https://fixture.invalid:443",
+        "guest_build_sha256": "44575cf5b28512d75644bf54a517dcef304ff809fd511747621b4d64f19aac66",
+        "capabilities_sha256": "8999ff4b6f811ddd8c2dfd6e9029c6a9639a7dd14f4915db1fc4053f2d8d7380"
+      },
+      "request_sha256": "d1a55ed8f959ea39fe114cc7f4972fdf4e9fde2fe00e353c56781d7a5ca3c1ce",
+      "nonce": "53239e777c3493141c28e2c9f49d3045e08ac73aa77da6561d4dc16feb087f2e",
+      "receipt_kind": "dispatch_result_v2",
+      "state": "dispatch_completed",
+      "accepted": true
+    },
+    {
+      "name": "Addendum4DispatchRestoreRunningResponse.json",
+      "source": "Addendum4DispatchRestoreRunning.json",
+      "binding": {
+        "protocol": "agentenv-process-epoch-v1",
+        "tenant_id": "fixture-tenant_id",
+        "sandbox_family": "legacy",
+        "sandbox_id": "fixture-sandbox_id",
+        "transition_id": "0c3bd738-12e4-5d09-8741-a08fc0d6551d",
+        "operation_id": "94643c08-3c21-532b-85d8-951dc48e0ec1",
+        "reserved_session_id": "2972dc5a-24bd-54fb-bdb4-16385c09aeb9",
+        "descriptor_sha256": "c6c9df73a3da259c929fe70d3f00bcf10a0252e0dc3603b2da4b1316047f58b8",
+        "node_id": "fixture-node_id",
+        "node_incarnation": "9e687121-ee3e-5f10-97eb-0fec582104f3",
+        "runtime_id": "9c98052b-f428-5c95-bca4-d29696804a3d",
+        "runtime_incarnation": "a0518879-6c5f-5d5a-a462-a20a4a70962b",
+        "guest_boot_id": "454fd0a6-7291-585e-bf9c-d87f93029130",
+        "enrollment_revision": 7,
+        "process_endpoint": "https://fixture.invalid:443",
+        "guest_build_sha256": "44575cf5b28512d75644bf54a517dcef304ff809fd511747621b4d64f19aac66",
+        "capabilities_sha256": "8999ff4b6f811ddd8c2dfd6e9029c6a9639a7dd14f4915db1fc4053f2d8d7380"
+      },
+      "request_sha256": "d1a55ed8f959ea39fe114cc7f4972fdf4e9fde2fe00e353c56781d7a5ca3c1ce",
+      "nonce": "085e354538df337f0a5fd21d149f6da2c7b4f9554e05c921ec8b4af25fc80f61",
+      "receipt_kind": "dispatch_result_v2",
+      "state": "dispatch_completed",
+      "accepted": true
+    },
+    {
+      "name": "Addendum4DispatchRestoreFailedResponse.json",
+      "source": "Addendum4DispatchRestoreFailed.json",
+      "binding": {
+        "protocol": "agentenv-process-epoch-v1",
+        "tenant_id": "fixture-tenant_id",
+        "sandbox_family": "legacy",
+        "sandbox_id": "fixture-sandbox_id",
+        "transition_id": "0c3bd738-12e4-5d09-8741-a08fc0d6551d",
+        "operation_id": "94643c08-3c21-532b-85d8-951dc48e0ec1",
+        "reserved_session_id": "2972dc5a-24bd-54fb-bdb4-16385c09aeb9",
+        "descriptor_sha256": "c6c9df73a3da259c929fe70d3f00bcf10a0252e0dc3603b2da4b1316047f58b8",
+        "node_id": "fixture-node_id",
+        "node_incarnation": "9e687121-ee3e-5f10-97eb-0fec582104f3",
+        "runtime_id": "9c98052b-f428-5c95-bca4-d29696804a3d",
+        "runtime_incarnation": "a0518879-6c5f-5d5a-a462-a20a4a70962b",
+        "guest_boot_id": "454fd0a6-7291-585e-bf9c-d87f93029130",
+        "enrollment_revision": 7,
+        "process_endpoint": "https://fixture.invalid:443",
+        "guest_build_sha256": "44575cf5b28512d75644bf54a517dcef304ff809fd511747621b4d64f19aac66",
+        "capabilities_sha256": "8999ff4b6f811ddd8c2dfd6e9029c6a9639a7dd14f4915db1fc4053f2d8d7380"
+      },
+      "request_sha256": "d1a55ed8f959ea39fe114cc7f4972fdf4e9fde2fe00e353c56781d7a5ca3c1ce",
+      "nonce": "162339f968ea64f6236be930a992489cb418f521242afd57a074d06a412e5fb5",
+      "receipt_kind": "dispatch_result_v2",
+      "state": "dispatch_completed",
+      "accepted": true
+    },
+    {
+      "name": "Addendum4DispatchRestoreUnknownResponse.json",
+      "source": "Addendum4DispatchRestoreUnknown.json",
+      "binding": {
+        "protocol": "agentenv-process-epoch-v1",
+        "tenant_id": "fixture-tenant_id",
+        "sandbox_family": "legacy",
+        "sandbox_id": "fixture-sandbox_id",
+        "transition_id": "0c3bd738-12e4-5d09-8741-a08fc0d6551d",
+        "operation_id": "94643c08-3c21-532b-85d8-951dc48e0ec1",
+        "reserved_session_id": "2972dc5a-24bd-54fb-bdb4-16385c09aeb9",
+        "descriptor_sha256": "c6c9df73a3da259c929fe70d3f00bcf10a0252e0dc3603b2da4b1316047f58b8",
+        "node_id": "fixture-node_id",
+        "node_incarnation": "9e687121-ee3e-5f10-97eb-0fec582104f3",
+        "runtime_id": "9c98052b-f428-5c95-bca4-d29696804a3d",
+        "runtime_incarnation": "a0518879-6c5f-5d5a-a462-a20a4a70962b",
+        "guest_boot_id": "454fd0a6-7291-585e-bf9c-d87f93029130",
+        "enrollment_revision": 7,
+        "process_endpoint": "https://fixture.invalid:443",
+        "guest_build_sha256": "44575cf5b28512d75644bf54a517dcef304ff809fd511747621b4d64f19aac66",
+        "capabilities_sha256": "8999ff4b6f811ddd8c2dfd6e9029c6a9639a7dd14f4915db1fc4053f2d8d7380"
+      },
+      "request_sha256": "d1a55ed8f959ea39fe114cc7f4972fdf4e9fde2fe00e353c56781d7a5ca3c1ce",
+      "nonce": "6f4b1eaf7fa9655d0e0491387a36266126499ab5c4986fff5ae3311dc204bb09",
+      "receipt_kind": "dispatch_result_v2",
+      "state": "dispatch_completed",
+      "accepted": true
+    }
+  ],
+  "context_negative": [
+    "Addendum4ForeignAllocationEvidence.json",
+    "Addendum4ForeignAllocationLookup.json",
+    "Addendum4ForeignAllocationResponse.json"
+  ],
+  "allocation_cases": [
+    {
+      "dispatch_response": "Addendum4DispatchCreateRunningResponse.json",
+      "evidence_response": "Addendum3HostCessationResponse.json",
+      "accepted": true
+    },
+    {
+      "dispatch_response": "Addendum4DispatchCreateRunningResponse.json",
+      "evidence_response": "Addendum4ForeignAllocationResponse.json",
+      "accepted": false
+    },
+    {
+      "dispatch_response": "Addendum4DispatchRestoreRunningResponse.json",
+      "evidence_response": "Addendum3HostCessationResponse.json",
+      "accepted": true
+    },
+    {
+      "dispatch_response": "Addendum4DispatchRestoreRunningResponse.json",
+      "evidence_response": "Addendum4ForeignAllocationResponse.json",
+      "accepted": false
+    },
+    {
+      "dispatch_response": "Addendum3DispatchCreateRunningResponse.json",
+      "evidence_response": "Addendum3HostCessationResponse.json",
+      "accepted": false
+    }
+  ],
+  "test_only_ed25519_seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+}

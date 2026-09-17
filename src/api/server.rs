@@ -35,5 +35,6 @@ where
             api_impl,
             auth::require_auth::<I>,
         ))
+        .layer(middleware::from_fn(super::process_epoch::refuse_dormant))
         .layer(middleware::from_fn(prometheus::http_metrics_middleware))
 }
