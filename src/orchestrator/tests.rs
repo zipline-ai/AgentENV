@@ -116,6 +116,9 @@ fn make_orchestrator_without_background_with_factory_and_persister<
         is_shutting_down: std::sync::atomic::AtomicBool::new(false),
         shutdown_tx: tokio::sync::watch::channel(false).0,
         shutdown_outcome: tokio::sync::OnceCell::new(),
+        lifecycle_admission: StdMutex::new(()),
+        lifecycle_tasks: TaskTracker::new(),
+        lifecycle_panicked: std::sync::atomic::AtomicBool::new(false),
         image_refs: test_runtime_image_refs(),
         access_tokens: SandboxAccessTokenGenerator::new("orchestrator-test-seed").unwrap(),
     })
@@ -3821,7 +3824,13 @@ async fn shutdown_succeeds_when_stop_after_pause_fails() -> Result<()> {
         .expect("paused sandbox metadata should remain after shutdown");
     assert_eq!(metadata.state, SandboxState::Paused);
 
-    orchestrator.delete_sandbox(sandbox_id).await?;
+    assert!(matches!(
+        orchestrator.delete_sandbox(sandbox_id).await,
+        Err(OrchestratorError::ShuttingDown)
+    ));
+    // Dispose of the fixture privately; public lifecycle admission is now closed.
+    // Keep the preservation assertion above and do not reopen production admission.
+    orchestrator.delete_sandbox_inner(sandbox_id).await?;
     Ok(())
 }
 
@@ -4767,5 +4776,202 @@ async fn fork_sandbox_register_failure_cleans_up_metrics() -> Result<()> {
 
     orchestrator.delete_sandbox(child.id).await?;
     orchestrator.delete_sandbox(source.id).await?;
+    Ok(())
+}
+
+// zippy:guarded — admission closes before a held reporter can delay cleanup.
+#[tokio::test]
+async fn close_admission_rejects_creation_before_cleanup_but_preserves_guests() -> Result<()> {
+    setup();
+    let persister = RecordingPersister::default();
+    let orchestrator = make_orchestrator_without_background_with_factory_and_persister(
+        InMemoryMetadataStore::new(),
+        MockBackendFactory::new(),
+        persister.clone(),
+    );
+    let existing = orchestrator
+        .create_sandbox(create_request(Some(60), &[]))
+        .await?;
+    orchestrator.close_admission();
+    orchestrator.close_admission();
+    let err = orchestrator
+        .create_sandbox(create_request(Some(60), &[]))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, OrchestratorError::ShuttingDown));
+    let before = orchestrator.list_sandboxes().await?;
+    assert_eq!(before.len(), 1);
+    assert_eq!(before[0].id, existing.id);
+    assert_eq!(before[0].state, SandboxState::Running);
+    assert!(persister.calls().is_empty());
+    orchestrator.shutdown().await?;
+    assert_eq!(
+        orchestrator.list_sandboxes().await?[0].state,
+        SandboxState::Paused
+    );
+    assert_eq!(
+        persister.calls(),
+        vec![
+            RecordingCall::AllocateArtifactRoot,
+            RecordingCall::PersistPaused
+        ]
+    );
+    orchestrator.shutdown().await?;
+    assert_eq!(persister.calls().len(), 2);
+    Ok(())
+}
+
+// zippy:guarded — HTTP expiry must not orphan a pre-metadata backend start.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn review_shutdown_must_join_accepted_create_before_metadata() -> Result<()> {
+    use crate::api::shutdown::{serve_with_shutdown, ShutdownState};
+    use axum::{routing::post, Router};
+    setup();
+    let behavior = Arc::new(MockBehavior::new());
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let entered_tx = Arc::new(StdMutex::new(Some(entered_tx)));
+    let gate = Arc::new((StdMutex::new(false), std::sync::Condvar::new()));
+    let held_gate = gate.clone();
+    behavior.set_on_operation(
+        MockOperation::StartNowait,
+        Arc::new(move || {
+            entered_tx.lock().unwrap().take().unwrap().send(()).unwrap();
+            let (lock, condition) = &*held_gate;
+            let mut released = lock.lock().unwrap();
+            while !*released {
+                released = condition.wait(released).unwrap();
+            }
+        }),
+    );
+    let orchestrator = make_orchestrator_without_background_with_factory(
+        InMemoryMetadataStore::new(),
+        MockBackendFactory::with_behavior(behavior.clone()),
+    );
+    let for_handler = orchestrator.clone();
+    let app = Router::new().route(
+        "/create",
+        post(move || {
+            let orchestrator = for_handler.clone();
+            async move {
+                format!(
+                    "{:?}",
+                    orchestrator
+                        .create_sandbox(create_request(Some(60), &[]))
+                        .await
+                )
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let (signal_tx, signal_rx) = tokio::sync::oneshot::channel();
+    let for_signal = orchestrator.clone();
+    let for_cleanup = orchestrator.clone();
+    let mut server = tokio::spawn(serve_with_shutdown(
+        listener,
+        app,
+        ShutdownState::default(),
+        async move {
+            signal_rx.await.unwrap();
+            for_signal.close_admission();
+        },
+        async move { for_cleanup.shutdown().await.map_err(std::io::Error::other) },
+        Duration::from_millis(20),
+    ));
+    let client = tokio::spawn(async move {
+        reqwest::Client::new()
+            .post(format!("http://{address}/create"))
+            .send()
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(5), entered_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(orchestrator.store.list().await?.is_empty());
+    signal_tx.send(()).unwrap();
+    let exited_before_release = tokio::time::timeout(Duration::from_secs(2), &mut server)
+        .await
+        .is_ok();
+    let stops_before_release = behavior.stop_calls();
+    // Always release the blocking mock, including on the failing implementation.
+    *gate.0.lock().unwrap() = true;
+    gate.1.notify_all();
+    if !exited_before_release {
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
+    let _ = client.await;
+    assert!(!exited_before_release, "shutdown returned while accepted backend start was still held before metadata; stop calls={stops_before_release}");
+    assert_eq!(stops_before_release, 0);
+    assert_eq!(
+        behavior.stop_calls(),
+        1,
+        "accepted create must finish its exact rollback"
+    );
+    assert!(orchestrator.store.list().await?.is_empty());
+    assert_eq!(orchestrator.lifecycle_tasks.len(), 0);
+    Ok(())
+}
+
+// zippy:guarded — closing admission must also close registration before effects.
+#[tokio::test]
+async fn shutdown_rejects_unregistered_lifecycle_work_without_polling_it() -> Result<()> {
+    setup();
+    let orchestrator = make_orchestrator_without_background(InMemoryMetadataStore::new());
+    orchestrator.close_admission();
+    let effects = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let work_effects = effects.clone();
+    let result = orchestrator
+        .run_cancellation_safe("delete", SandboxId::new(), async move {
+            work_effects.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        })
+        .await;
+    assert!(matches!(result, Err(OrchestratorError::ShuttingDown)));
+    assert_eq!(effects.load(Ordering::SeqCst), 0);
+    assert_eq!(orchestrator.lifecycle_tasks.len(), 0);
+    orchestrator.shutdown().await?;
+    Ok(())
+}
+
+// zippy:guarded — a panic cannot turn registry completion into preservation success.
+#[tokio::test]
+async fn shutdown_reports_panicked_accepted_work_after_preserving_known_guests() -> Result<()> {
+    setup();
+    let persister = RecordingPersister::default();
+    let orchestrator = make_orchestrator_without_background_with_factory_and_persister(
+        InMemoryMetadataStore::new(),
+        MockBackendFactory::new(),
+        persister.clone(),
+    );
+    orchestrator
+        .create_sandbox(create_request(Some(60), &[]))
+        .await?;
+    let failed: Result<()> = orchestrator
+        .run_cancellation_safe("test-panic", SandboxId::new(), async {
+            panic!("accepted lifecycle panic fixture");
+        })
+        .await;
+    assert!(failed.is_err());
+    let error = orchestrator.shutdown().await.unwrap_err();
+    assert!(error.to_string().contains("panicked"));
+    assert_eq!(orchestrator.lifecycle_tasks.len(), 0);
+    assert_eq!(
+        orchestrator.list_sandboxes().await?[0].state,
+        SandboxState::Paused
+    );
+    assert_eq!(
+        persister.calls(),
+        vec![
+            RecordingCall::AllocateArtifactRoot,
+            RecordingCall::PersistPaused
+        ]
+    );
+    assert!(orchestrator.shutdown().await.is_err());
+    assert_eq!(persister.calls().len(), 2);
     Ok(())
 }

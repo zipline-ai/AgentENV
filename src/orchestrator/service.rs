@@ -6,8 +6,10 @@ use std::sync::{
 use std::time::{Duration, SystemTime};
 
 use anyhow::Context;
+use futures::FutureExt;
 use tokio::sync::{broadcast, oneshot, watch, Mutex, OnceCell, RwLock};
 use tokio::time::MissedTickBehavior;
+use tokio_util::task::TaskTracker;
 use tracing::{debug, info, trace, warn};
 
 use crate::cfg::ConfigManager;
@@ -105,6 +107,9 @@ pub struct Orchestrator<
     is_shutting_down: std::sync::atomic::AtomicBool,
     shutdown_tx: watch::Sender<bool>,
     shutdown_outcome: OnceCell<ShutdownOutcome>,
+    lifecycle_admission: std::sync::Mutex<()>,
+    lifecycle_tasks: TaskTracker,
+    lifecycle_panicked: std::sync::atomic::AtomicBool,
     image_refs: Arc<dyn RuntimeImageRefs>,
     access_tokens: SandboxAccessTokenGenerator,
 }
@@ -195,6 +200,9 @@ where
             is_shutting_down: std::sync::atomic::AtomicBool::new(false),
             shutdown_tx,
             shutdown_outcome: OnceCell::new(),
+            lifecycle_admission: std::sync::Mutex::new(()),
+            lifecycle_tasks: TaskTracker::new(),
+            lifecycle_panicked: std::sync::atomic::AtomicBool::new(false),
             image_refs,
             access_tokens,
         });
@@ -238,9 +246,34 @@ where
     where
         T: Send + 'static,
     {
+        // Admission and registration are one synchronous critical section.
+        // The token exists before the task can perform even pre-metadata work.
+        let registration = {
+            let _admission = self
+                .lifecycle_admission
+                .lock()
+                .expect("lifecycle admission poisoned");
+            if self.is_shutting_down() {
+                if operation == "create" {
+                    self.counters.record_create_fail(1);
+                }
+                return Err(OrchestratorError::ShuttingDown);
+            }
+            self.lifecycle_tasks.token()
+        };
+        let owner = Arc::clone(self);
         let (tx, rx) = oneshot::channel();
         tokio::spawn(async move {
-            let result = future.await;
+            let _registration = registration;
+            let result = match std::panic::AssertUnwindSafe(future).catch_unwind().await {
+                Ok(result) => result,
+                Err(_) => {
+                    owner.lifecycle_panicked.store(true, Ordering::Release);
+                    Err(OrchestratorError::InternalError(format!(
+                        "accepted {operation} panicked; guest preservation is unproved"
+                    )))
+                }
+            };
             if tx.send(result).is_err() {
                 debug!(
                     sandbox_id = %sandbox_id,
@@ -1023,22 +1056,44 @@ where
     /// error if any sandbox could not be cleaned up after several passes.
     #[tracing::instrument(skip(self))]
     pub async fn shutdown(self: &Arc<Self>) -> Result<()> {
-        let was_already_shutting_down = self.is_shutting_down.swap(true, Ordering::AcqRel);
-        let _ = self.shutdown_tx.send_replace(true);
-
-        if !was_already_shutting_down {
-            info!("orchestrator shutdown requested; stopping all sandboxes");
-        }
+        self.close_admission();
 
         let this = Arc::clone(self);
         let outcome = self
             .shutdown_outcome
             .get_or_init(|| async move {
-                ShutdownOutcome::from_result(this.run_shutdown_cleanup().await)
+                info!(remaining_operations = this.lifecycle_tasks.len(), "joining accepted lifecycle operations before guest cleanup");
+                this.lifecycle_tasks.wait().await;
+                let cleanup = this.run_shutdown_cleanup().await;
+                let result = if this.lifecycle_panicked.load(Ordering::Acquire) {
+                    Err(OrchestratorError::InternalError(format!(
+                        "accepted lifecycle operation panicked; preservation is unproved; cleanup result: {cleanup:?}"
+                    )))
+                } else {
+                    cleanup
+                };
+                ShutdownOutcome::from_result(result)
             })
             .await;
 
         outcome.as_result()
+    }
+
+    /// Close lifecycle admission synchronously, before reporter cleanup can wait.
+    /// Accepted tasks remain registered until terminal rollback or publication;
+    /// shutdown joins them before discovering guests to preserve.
+    pub fn close_admission(&self) {
+        let _admission = self
+            .lifecycle_admission
+            .lock()
+            .expect("lifecycle admission poisoned");
+        let was_already_shutting_down = self.is_shutting_down.swap(true, Ordering::AcqRel);
+        self.lifecycle_tasks.close();
+        let _ = self.shutdown_tx.send_replace(true);
+
+        if !was_already_shutting_down {
+            info!("orchestrator shutdown requested; stopping all sandboxes");
+        }
     }
 
     /// Pauses a running sandbox by taking a snapshot and stopping its VM.

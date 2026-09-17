@@ -1,5 +1,6 @@
 use std::sync::{Arc, RwLock};
 
+use agentenv::api::shutdown::{cleanup_phase, serve_with_shutdown, HTTP_DRAIN_BUDGET};
 use agentenv::api::{server, ApiImpl};
 use agentenv::api_key::ApiKey;
 use agentenv::identity::NodeIdentity;
@@ -10,9 +11,7 @@ use agentenv::overlaybd::OverlaybdP2pRuntime;
 use agentenv::sandbox::{FirecrackerPool, FirecrackerSandboxFactory, UblkDeviceManager};
 use agentenv::snapshot::SnapshotManager;
 use agentenv::template::TemplateBuilder;
-use axum::serve::ListenerExt;
 use clap::Parser;
-use tokio::sync::oneshot;
 use tracing::{info, warn};
 
 #[global_allocator]
@@ -152,61 +151,70 @@ async fn main() -> anyhow::Result<()> {
         config.sandbox_proxy.domains.clone(),
         api_key,
     ));
+    let http_shutdown = api_impl.http_shutdown_state();
     let app = server::new(api_impl);
     let shutdown_orchestrator = Arc::clone(&orchestrator);
-    let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
-    // envd streams a command's lifecycle as a burst of tiny Connect-RPC frames.
-    // With Nagle left on, the frame after the first one waits for the client's
-    // delayed ACK, adding a ~40ms floor to every short-lived command.
-    let listener = tokio::net::TcpListener::bind(&addr).await?.tap_io(|stream| {
-        if let Err(err) = stream.set_nodelay(true) {
-            warn!(target: "agentenv", error = %err, "failed to set TCP_NODELAY on incoming connection");
-        }
-    });
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
     info!(target: "agentenv", addr = %addr, "API server listening");
 
-    let shutdown_cleanup = tokio::spawn(async move {
-        if let Ok(()) = shutdown_rx.await {
-            if let Some(mut handle) = reporter.take() {
-                info!(target: "agentenv", "stopping observability reporter before process exit");
-                if let Err(err) = handle.shutdown().await {
-                    warn!(target: "agentenv", error = %err, "error occurred while shutting down observability reporter");
-                }
-            }
-            info!(target: "agentenv", "stopping sandboxes before process exit");
-            if let Err(err) = shutdown_orchestrator.shutdown().await {
-                warn!(target: "agentenv", error = %err, "error occurred while shutting down orchestrator");
-            }
-            if let Some(pool) = FirecrackerPool::global() {
-                info!(target: "agentenv", "shutting down firecracker pool");
-                if let Err(err) = pool.shutdown().await {
-                    warn!(target: "agentenv", error = %err, "error occurred while shutting down firecracker pool");
-                }
-            }
-            info!(target: "agentenv", "shutting down ublk daemon");
-            if let Err(err) = UblkDeviceManager::global().shutdown_daemon().await {
-                warn!(target: "agentenv", error = %err, "error occurred while shutting down ublk daemon");
-            }
-            info!(target: "agentenv", "shutting down overlaybd p2p runtime");
-            if let Err(err) = overlaybd_p2p.shutdown().await {
-                warn!(target: "agentenv", error = %err, "error occurred while shutting down overlaybd p2p runtime");
-            }
-            info!(target: "agentenv", "shutting down p2p transport");
-            if let Err(err) = p2p_transport.shutdown().await {
-                warn!(target: "agentenv", error = %err, "error occurred while shutting down p2p transport");
+    let shutdown_cleanup = async move {
+        let mut failures = Vec::new();
+        if let Some(mut handle) = reporter.take() {
+            info!(target: "agentenv", "stopping observability reporter before process exit");
+            if let Err(err) = cleanup_phase("reporter", handle.shutdown()).await {
+                failures.push(format!("reporter: {err}"));
+                warn!(target: "agentenv", error = %err, "error occurred while shutting down observability reporter");
             }
         }
-    });
+        info!(target: "agentenv", "stopping sandboxes before process exit");
+        if let Err(err) = cleanup_phase("orchestrator", shutdown_orchestrator.shutdown()).await {
+            failures.push(format!("orchestrator: {err}"));
+            warn!(target: "agentenv", error = %err, "error occurred while shutting down orchestrator");
+        }
+        if let Some(pool) = FirecrackerPool::global() {
+            info!(target: "agentenv", "shutting down firecracker pool");
+            if let Err(err) = cleanup_phase("firecracker_pool", pool.shutdown()).await {
+                failures.push(format!("firecracker_pool: {err}"));
+                warn!(target: "agentenv", error = %err, "error occurred while shutting down firecracker pool");
+            }
+        }
+        info!(target: "agentenv", "shutting down ublk daemon");
+        if let Err(err) =
+            cleanup_phase("ublk_daemon", UblkDeviceManager::global().shutdown_daemon()).await
+        {
+            failures.push(format!("ublk_daemon: {err}"));
+            warn!(target: "agentenv", error = %err, "error occurred while shutting down ublk daemon");
+        }
+        info!(target: "agentenv", "shutting down overlaybd p2p runtime");
+        if let Err(err) = cleanup_phase("overlaybd_p2p", overlaybd_p2p.shutdown()).await {
+            failures.push(format!("overlaybd_p2p: {err}"));
+            warn!(target: "agentenv", error = %err, "error occurred while shutting down overlaybd p2p runtime");
+        }
+        info!(target: "agentenv", "shutting down p2p transport");
+        if let Err(err) = cleanup_phase("p2p_transport", p2p_transport.shutdown()).await {
+            failures.push(format!("p2p_transport: {err}"));
+            warn!(target: "agentenv", error = %err, "error occurred while shutting down p2p transport");
+        }
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(std::io::Error::other(failures.join("; ")))
+        }
+    };
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async move {
+    serve_with_shutdown(
+        listener,
+        app,
+        http_shutdown,
+        async move {
             shutdown_signal().await;
-            let _ = shutdown_tx.send(());
-        })
-        .await?;
-
-    shutdown_cleanup.await?;
+            orchestrator.close_admission();
+        },
+        shutdown_cleanup,
+        HTTP_DRAIN_BUDGET,
+    )
+    .await?;
 
     Ok(())
 }
