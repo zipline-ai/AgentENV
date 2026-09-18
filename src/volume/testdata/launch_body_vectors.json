@@ -1,0 +1,23 @@
+[
+  {
+    "Name": "create",
+    "Body": "{\"templateID\":\"template-immutable-id\",\"timeout\":300,\"autoPause\":true,\"autoResume\":{\"enabled\":false},\"envVars\":{\"PUBLIC\":\"\\u003chello\\u003e \\\"world\\\" ☃\"},\"metadata\":{\"volumeEncryption\":\"nested ordinary data\"}}",
+    "Envelope": "{\"volumeId\":\"vol_a\",\"volumeKind\":\"sandbox_rootfs\",\"grant\":\"eyJ2Ijo2fQ==\",\"signature\":\"AQID\",\"wrappedDek\":\"BAUG\",\"kmsKey\":\"projects/p/locations/l/keyRings/r/cryptoKeys/k\",\"kmsKeyVersion\":\"projects/p/locations/l/keyRings/r/cryptoKeys/k/cryptoKeyVersions/1\",\"kmsAad\":\"vol:tenant:vol_a\",\"cipher\":\"aes-xts-plain64\",\"sectorSize\":4096}",
+    "Wire": "{\"templateID\":\"template-immutable-id\",\"timeout\":300,\"autoPause\":true,\"autoResume\":{\"enabled\":false},\"envVars\":{\"PUBLIC\":\"\\u003chello\\u003e \\\"world\\\" ☃\"},\"metadata\":{\"volumeEncryption\":\"nested ordinary data\"},\"volumeEncryption\":{\"volumeId\":\"vol_a\",\"volumeKind\":\"sandbox_rootfs\",\"grant\":\"eyJ2Ijo2fQ==\",\"signature\":\"AQID\",\"wrappedDek\":\"BAUG\",\"kmsKey\":\"projects/p/locations/l/keyRings/r/cryptoKeys/k\",\"kmsKeyVersion\":\"projects/p/locations/l/keyRings/r/cryptoKeys/k/cryptoKeyVersions/1\",\"kmsAad\":\"vol:tenant:vol_a\",\"cipher\":\"aes-xts-plain64\",\"sectorSize\":4096}}",
+    "SHA256": "15c33f353b61b09e900972b6c4dea1c51059a7a3ce80c2e0759a1428b6188720"
+  },
+  {
+    "Name": "restore",
+    "Body": "{\"templateID\":\"snapshot-id\",\"metadata\":{\"zippy.stable_sandbox_id\":\"stable\",\"zippy.generation\":\"2\"},\"async_restore\":{\"node_id\":\"node\",\"node_incarnation\":\"boot\",\"runtime_id\":\"new-runtime\"}}",
+    "Envelope": "{\"volumeId\":\"vol_a\",\"volumeKind\":\"sandbox_rootfs\",\"grant\":\"eyJ2Ijo2fQ==\",\"signature\":\"AQID\",\"wrappedDek\":\"BAUG\",\"kmsKey\":\"projects/p/locations/l/keyRings/r/cryptoKeys/k\",\"kmsKeyVersion\":\"projects/p/locations/l/keyRings/r/cryptoKeys/k/cryptoKeyVersions/1\",\"kmsAad\":\"vol:tenant:vol_a\",\"cipher\":\"aes-xts-plain64\",\"sectorSize\":4096}",
+    "Wire": "{\"templateID\":\"snapshot-id\",\"metadata\":{\"zippy.stable_sandbox_id\":\"stable\",\"zippy.generation\":\"2\"},\"async_restore\":{\"node_id\":\"node\",\"node_incarnation\":\"boot\",\"runtime_id\":\"new-runtime\"},\"volumeEncryption\":{\"volumeId\":\"vol_a\",\"volumeKind\":\"sandbox_rootfs\",\"grant\":\"eyJ2Ijo2fQ==\",\"signature\":\"AQID\",\"wrappedDek\":\"BAUG\",\"kmsKey\":\"projects/p/locations/l/keyRings/r/cryptoKeys/k\",\"kmsKeyVersion\":\"projects/p/locations/l/keyRings/r/cryptoKeys/k/cryptoKeyVersions/1\",\"kmsAad\":\"vol:tenant:vol_a\",\"cipher\":\"aes-xts-plain64\",\"sectorSize\":4096}}",
+    "SHA256": "bb54c51cff13b332071867de88ab59599dcb16cc580c9878ce8d9384f19a250b"
+  },
+  {
+    "Name": "whitespace",
+    "Body": "{ \"templateID\" : \"template-id\", \"metadata\":{\"volumeEncryption\":\"not a root envelope\"} }",
+    "Envelope": "{\"volumeId\":\"vol_a\",\"volumeKind\":\"sandbox_rootfs\",\"grant\":\"eyJ2Ijo2fQ==\",\"signature\":\"AQID\",\"wrappedDek\":\"BAUG\",\"kmsKey\":\"projects/p/locations/l/keyRings/r/cryptoKeys/k\",\"kmsKeyVersion\":\"projects/p/locations/l/keyRings/r/cryptoKeys/k/cryptoKeyVersions/1\",\"kmsAad\":\"vol:tenant:vol_a\",\"cipher\":\"aes-xts-plain64\",\"sectorSize\":4096}",
+    "Wire": "{ \"templateID\" : \"template-id\", \"metadata\":{\"volumeEncryption\":\"not a root envelope\"} ,\"volumeEncryption\":{\"volumeId\":\"vol_a\",\"volumeKind\":\"sandbox_rootfs\",\"grant\":\"eyJ2Ijo2fQ==\",\"signature\":\"AQID\",\"wrappedDek\":\"BAUG\",\"kmsKey\":\"projects/p/locations/l/keyRings/r/cryptoKeys/k\",\"kmsKeyVersion\":\"projects/p/locations/l/keyRings/r/cryptoKeys/k/cryptoKeyVersions/1\",\"kmsAad\":\"vol:tenant:vol_a\",\"cipher\":\"aes-xts-plain64\",\"sectorSize\":4096}}",
+    "SHA256": "90f217fc183303d8979d7b53e4a7f4f89693b3aa02af9ac35a7a56efe40d7873"
+  }
+]
